@@ -1,9 +1,12 @@
 """
 FastAPI Backend - Sistema de Transformação de Vídeo em Livro Didático
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 import os
+
+from database import get_db, check_database_connection
 
 app = FastAPI(
     title="Video to Book API",
@@ -32,10 +35,12 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Verificação de saúde da aplicação"""
+    db_status = "connected" if check_database_connection() else "disconnected"
+    
     return {
-        "status": "healthy",
-        "database": "connected",  # TODO: Implementar verificação real do DB
-        "ffmpeg": "available"      # TODO: Verificar se FFmpeg está instalado
+        "status": "healthy" if db_status == "connected" else "unhealthy",
+        "database": db_status,
+        "ffmpeg": "available"  # TODO: Verificar se FFmpeg está instalado
     }
 
 if __name__ == "__main__":
