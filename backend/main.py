@@ -1,0 +1,43 @@
+"""
+FastAPI Backend - Sistema de Transformação de Vídeo em Livro Didático
+"""
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import os
+
+app = FastAPI(
+    title="Video to Book API",
+    description="Sistema de transformação de vídeos educacionais em livros didáticos",
+    version="1.0.0"
+)
+
+# Configurar CORS para permitir requisições do frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+async def root():
+    """Endpoint de health check"""
+    return {
+        "status": "online",
+        "message": "Video to Book API is running",
+        "media_storage": os.getenv("MEDIA_STORAGE_PATH", "/app/media")
+    }
+
+@app.get("/health")
+async def health_check():
+    """Verificação de saúde da aplicação"""
+    return {
+        "status": "healthy",
+        "database": "connected",  # TODO: Implementar verificação real do DB
+        "ffmpeg": "available"      # TODO: Verificar se FFmpeg está instalado
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
