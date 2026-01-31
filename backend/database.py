@@ -5,11 +5,17 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file from project root
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # Get database URL from environment variable
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:postgres@db:5432/video_to_book"
+    "postgresql://postgres:postgres@localhost:5432/video_to_book"
 )
 
 # Create SQLAlchemy engine

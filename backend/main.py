@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 import os
 
 from database import get_db, check_database_connection
+from routes.auth_routes import router as auth_router
 
 app = FastAPI(
     title="Video to Book API",
@@ -22,6 +23,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(auth_router)
 
 @app.get("/")
 async def root():
