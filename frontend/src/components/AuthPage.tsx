@@ -64,51 +64,52 @@ const AuthPage: React.FC = () => {
         // API INTEGRATION - Uncomment to connect to backend
         // ================================================
 
-        /*
+
         try {
-          const endpoint = mode === 'register' 
-            ? 'http://localhost:8000/auth/register' 
-            : 'http://localhost:8000/auth/login';
-          
-          const payload = mode === 'register'
-            ? { full_name: fullName, email, password }
-            : { email, password };
-    
-          // Using fetch
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-          });
-    
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Erro na autenticação');
-          }
-    
-          const data = await response.json();
-          
-          // Store token in localStorage
-          localStorage.setItem('access_token', data.access_token);
-          
-          // Redirect to dashboard
-          window.location.href = '/dashboard';
-    
+            const endpoint = mode === 'register'
+                ? 'http://localhost:8000/auth/register'
+                : 'http://localhost:8000/auth/login';
+
+            const payload = mode === 'register'
+                ? { full_name: fullName, email, password }
+                : { email, password };
+
+            // Using fetch
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Erro na autenticação');
+            }
+
+            const data = await response.json();
+
+            // Store token in localStorage
+            localStorage.setItem('access_token', data.access_token);
+
+            // Redirect to dashboard
+            window.location.href = '/dashboard';
+
         } catch (error) {
-          console.error('Auth error:', error);
-          setErrors({ 
-            email: error instanceof Error ? error.message : 'Erro ao processar solicitação' 
-          });
+            console.error('Auth error:', error);
+            setErrors({
+                email: error instanceof Error ? error.message : 'Erro ao processar solicitação'
+            });
         } finally {
-          setIsLoading(false);
+            setIsLoading(false);
         }
-        */
+
 
         // ================================================
         // SIMULATED SUCCESS - Remove when API is connected
         // ================================================
+        /*
         setTimeout(() => {
             setIsLoading(false);
             console.log('Auth successful (simulated):', { mode, email, fullName });
@@ -116,6 +117,7 @@ const AuthPage: React.FC = () => {
             // window.location.href = '/dashboard';
             alert(`${mode === 'login' ? 'Login' : 'Cadastro'} realizado com sucesso! Redirecionando para /dashboard...`);
         }, 1500);
+        */
     };
 
     // Switch between login and register modes
@@ -154,8 +156,8 @@ const AuthPage: React.FC = () => {
                         <button
                             onClick={() => switchMode('login')}
                             className={`flex-1 py-4 text-sm font-semibold transition-all duration-300 ${mode === 'login'
-                                    ? 'text-white bg-gradient-to-r from-purple-500/20 to-indigo-500/20 border-b-2 border-purple-400'
-                                    : 'text-slate-400 hover:text-slate-300'
+                                ? 'text-white bg-gradient-to-r from-purple-500/20 to-indigo-500/20 border-b-2 border-purple-400'
+                                : 'text-slate-400 hover:text-slate-300'
                                 }`}
                         >
                             Entrar
@@ -163,8 +165,8 @@ const AuthPage: React.FC = () => {
                         <button
                             onClick={() => switchMode('register')}
                             className={`flex-1 py-4 text-sm font-semibold transition-all duration-300 ${mode === 'register'
-                                    ? 'text-white bg-gradient-to-r from-purple-500/20 to-indigo-500/20 border-b-2 border-purple-400'
-                                    : 'text-slate-400 hover:text-slate-300'
+                                ? 'text-white bg-gradient-to-r from-purple-500/20 to-indigo-500/20 border-b-2 border-purple-400'
+                                : 'text-slate-400 hover:text-slate-300'
                                 }`}
                         >
                             Criar Conta
