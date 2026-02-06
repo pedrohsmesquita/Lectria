@@ -32,6 +32,7 @@ const UploadDashboard: React.FC = () => {
     const [showResumeModal, setShowResumeModal] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const activeUploads = useRef<{ [key: string]: XMLHttpRequest }>({});
 
     const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
     const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/avi', 'video/mov', 'video/mkv', 'video/webm', 'video/quicktime'];
@@ -143,6 +144,7 @@ const UploadDashboard: React.FC = () => {
             });
 
             xhr.addEventListener('load', async () => {
+                delete activeUploads.current[videoFile.id]; // Remove from active uploads
                 if (xhr.status === 201) {
                     setVideos(prev => prev.map(v =>
                         v.id === videoFile.id ? { ...v, status: 'success', progress: 100 } : v
@@ -161,6 +163,7 @@ const UploadDashboard: React.FC = () => {
             });
 
             xhr.addEventListener('error', async () => {
+                delete activeUploads.current[videoFile.id]; // Remove from active uploads
                 setVideos(prev => prev.map(v =>
                     v.id === videoFile.id ? { ...v, status: 'error', error: 'Erro de conexão' } : v
                 ));
@@ -168,7 +171,14 @@ const UploadDashboard: React.FC = () => {
                 reject(new Error('Erro de conexão'));
             });
 
+            xhr.addEventListener('abort', async () => {
+                delete activeUploads.current[videoFile.id]; // Remove from active uploads
+                // State update handled in removeVideo to avoid race conditions
+                reject(new Error('Upload cancelado'));
+            });
+
             xhr.open('POST', 'http://localhost:8000/videos/upload');
+            activeUploads.current[videoFile.id] = xhr; // Store XHR reference
             xhr.setRequestHeader('Authorization', `Bearer ${token}`);
             xhr.send(formData);
         });
@@ -254,8 +264,14 @@ const UploadDashboard: React.FC = () => {
         handleFiles(e.dataTransfer.files);
     };
 
-    // Remove video from queue
+    // Remove video from queue (and cancel if uploading)
     const removeVideo = async (id: string) => {
+        // Cancel upload if active
+        if (activeUploads.current[id]) {
+            activeUploads.current[id].abort();
+            delete activeUploads.current[id];
+        }
+
         await uploadQueue.removeFromQueue(id);
         setVideos(prev => prev.filter(v => v.id !== id));
     };
@@ -374,7 +390,7 @@ const UploadDashboard: React.FC = () => {
                                                 <button
                                                     onClick={() => removeVideo(video.id)}
                                                     className="text-slate-400 hover:text-red-400 transition-colors ml-2"
-                                                    disabled={video.status === 'uploading'}
+                                                    title={video.status === 'uploading' ? "Cancelar upload" : "Remover da fila"}
                                                 >
                                                     <X className="w-5 h-5" />
                                                 </button>
