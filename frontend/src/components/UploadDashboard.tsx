@@ -1,6 +1,8 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { Upload, Video, CheckCircle, XCircle, Loader2, X, FileVideo } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Upload, Video, CheckCircle, XCircle, Loader2, X, FileVideo, ArrowLeft, BookOpen } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import * as uploadQueue from '../utils/uploadQueue';
+import ResumePendingUploadsModal from './ResumePendingUploadsModal';
 
 // ============================================
 // UploadDashboard Component - Video Upload
@@ -14,19 +16,86 @@ interface VideoFile {
     error?: string;
 }
 
+interface BookInfo {
+    id: string;
+    title: string;
+    author: string;
+    video_count: number;
+}
+
 const UploadDashboard: React.FC = () => {
     const navigate = useNavigate();
+    const { bookId } = useParams<{ bookId: string }>();
     const [videos, setVideos] = useState<VideoFile[]>([]);
     const [isDragging, setIsDragging] = useState(false);
+    const [bookInfo, setBookInfo] = useState<BookInfo | null>(null);
+    const [showResumeModal, setShowResumeModal] = useState(false);
+    const [pendingCount, setPendingCount] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    // TEMPORARY: UUID fake apenas para VISUALIZAR o dashboard
-    // Para fazer uploads REAIS, você precisa criar um livro no banco e colocar o UUID verdadeiro aqui
-    const BOOK_ID = '00000000-0000-0000-0000-000000000000'; // ⚠️ UUID FAKE - uploads vão falhar
 
     const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
     const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/avi', 'video/mov', 'video/mkv', 'video/webm', 'video/quicktime'];
-    const MAX_PARALLEL_UPLOADS = 3;
+    const MAX_PARALLEL_UPLOADS = 1; // Changed from 3 to 1 (sequential uploads)
+
+    // Fetch book information
+    const fetchBookInfo = async () => {
+        if (!bookId) return;
+
+        try {
+            const token = localStorage.getItem('access_token');
+            const response = await fetch(`http://localhost:8000/books/${bookId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setBookInfo(data);
+            } else if (response.status === 403 || response.status === 404) {
+                navigate('/dashboard');
+            }
+        } catch (error) {
+            console.error('Error fetching book info:', error);
+        }
+    };
+
+    // Load queue from IndexedDB on mount
+    useEffect(() => {
+        const loadQueue = async () => {
+            if (!bookId) return;
+
+            const queueItems = await uploadQueue.getQueueForBook(bookId);
+
+            if (queueItems.length > 0) {
+                const pendingItems = queueItems.filter(item =>
+                    item.status === 'pending' || item.status === 'uploading'
+                );
+
+                if (pendingItems.length > 0) {
+                    setPendingCount(pendingItems.length);
+                    setShowResumeModal(true);
+                } else {
+                    // Load all items (including completed/errored)
+                    setVideos(queueItems);
+                }
+            }
+        };
+
+        fetchBookInfo();
+        loadQueue();
+    }, [bookId]);
+
+    // Handle resume decision
+    const handleResume = async () => {
+        if (!bookId) return;
+        const queueItems = await uploadQueue.getQueueForBook(bookId);
+        setVideos(queueItems);
+        setShowResumeModal(false);
+    };
+
+    const handleDiscard = async () => {
+        await uploadQueue.clearAllQueue();
+        setShowResumeModal(false);
+    };
 
     // Format file size
     const formatFileSize = (bytes: number): string => {
@@ -49,9 +118,11 @@ const UploadDashboard: React.FC = () => {
 
     // Upload single video
     const uploadVideo = async (videoFile: VideoFile) => {
+        if (!bookId) return;
+
         const formData = new FormData();
         formData.append('file', videoFile.file);
-        formData.append('book_id', BOOK_ID);
+        formData.append('book_id', bookId);
 
         const token = localStorage.getItem('access_token');
         if (!token) {
@@ -61,20 +132,22 @@ const UploadDashboard: React.FC = () => {
         return new Promise<void>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
 
-            xhr.upload.addEventListener('progress', (e) => {
+            xhr.upload.addEventListener('progress', async (e) => {
                 if (e.lengthComputable) {
                     const progress = Math.round((e.loaded / e.total) * 100);
                     setVideos(prev => prev.map(v =>
                         v.id === videoFile.id ? { ...v, progress } : v
                     ));
+                    await uploadQueue.updateVideoStatus(videoFile.id, 'uploading', progress);
                 }
             });
 
-            xhr.addEventListener('load', () => {
-                if (xhr.status === 200) {
+            xhr.addEventListener('load', async () => {
+                if (xhr.status === 201) {
                     setVideos(prev => prev.map(v =>
                         v.id === videoFile.id ? { ...v, status: 'success', progress: 100 } : v
                     ));
+                    await uploadQueue.removeFromQueue(videoFile.id);
                     resolve();
                 } else {
                     const errorData = JSON.parse(xhr.responseText);
@@ -82,14 +155,16 @@ const UploadDashboard: React.FC = () => {
                     setVideos(prev => prev.map(v =>
                         v.id === videoFile.id ? { ...v, status: 'error', error: errorMessage } : v
                     ));
+                    await uploadQueue.updateVideoStatus(videoFile.id, 'error', 0, errorMessage);
                     reject(new Error(errorMessage));
                 }
             });
 
-            xhr.addEventListener('error', () => {
+            xhr.addEventListener('error', async () => {
                 setVideos(prev => prev.map(v =>
                     v.id === videoFile.id ? { ...v, status: 'error', error: 'Erro de conexão' } : v
                 ));
+                await uploadQueue.updateVideoStatus(videoFile.id, 'error', 0, 'Erro de conexão');
                 reject(new Error('Erro de conexão'));
             });
 
@@ -99,7 +174,7 @@ const UploadDashboard: React.FC = () => {
         });
     };
 
-    // Process upload queue
+    // Process upload queue (sequential - 1 at a time)
     const processQueue = useCallback(async () => {
         const pendingVideos = videos.filter(v => v.status === 'pending');
         const uploadingCount = videos.filter(v => v.status === 'uploading').length;
@@ -120,20 +195,19 @@ const UploadDashboard: React.FC = () => {
     }, [videos]);
 
     // Auto-process queue when videos change
-    React.useEffect(() => {
+    useEffect(() => {
         processQueue();
     }, [videos, processQueue]);
 
     // Handle file selection
-    const handleFiles = (files: FileList | null) => {
-        if (!files) return;
+    const handleFiles = async (files: FileList | null) => {
+        if (!files || !bookId) return;
 
         const newVideos: VideoFile[] = [];
 
-        Array.from(files).forEach(file => {
+        for (const file of Array.from(files)) {
             const validationError = validateFile(file);
             if (validationError) {
-                // Add as error immediately
                 newVideos.push({
                     id: Math.random().toString(36).substring(7),
                     file,
@@ -142,14 +216,15 @@ const UploadDashboard: React.FC = () => {
                     error: validationError
                 });
             } else {
+                const queueItem = await uploadQueue.addToQueue(bookId, file);
                 newVideos.push({
-                    id: Math.random().toString(36).substring(7),
-                    file,
-                    status: 'pending',
-                    progress: 0
+                    id: queueItem.id,
+                    file: queueItem.file,
+                    status: queueItem.status,
+                    progress: queueItem.progress
                 });
             }
-        });
+        }
 
         setVideos(prev => [...prev, ...newVideos]);
     };
@@ -180,19 +255,15 @@ const UploadDashboard: React.FC = () => {
     };
 
     // Remove video from queue
-    const removeVideo = (id: string) => {
+    const removeVideo = async (id: string) => {
+        await uploadQueue.removeFromQueue(id);
         setVideos(prev => prev.filter(v => v.id !== id));
     };
 
     // Clear completed/errored videos
-    const clearCompleted = () => {
+    const clearCompleted = async () => {
+        await uploadQueue.clearCompleted(bookId);
         setVideos(prev => prev.filter(v => v.status === 'pending' || v.status === 'uploading'));
-    };
-
-    // Logout handler
-    const handleLogout = () => {
-        localStorage.removeItem('access_token');
-        navigate('/login');
     };
 
     return (
@@ -207,16 +278,21 @@ const UploadDashboard: React.FC = () => {
             <div className="relative max-w-5xl mx-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-8">
-                    <div>
-                        <h1 className="text-3xl font-bold text-white mb-2">Dashboard de Upload</h1>
-                        <p className="text-slate-400">Envie seus vídeos para transformar em conhecimento</p>
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => navigate('/dashboard')}
+                            className="p-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-lg transition-all"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </button>
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <BookOpen className="w-5 h-5 text-purple-400" />
+                                <h1 className="text-3xl font-bold text-white">{bookInfo?.title || 'Carregando...'}</h1>
+                            </div>
+                            <p className="text-slate-400">Adicione vídeos ao seu livro</p>
+                        </div>
                     </div>
-                    <button
-                        onClick={handleLogout}
-                        className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-lg transition-all"
-                    >
-                        Sair
-                    </button>
                 </div>
 
                 {/* Upload Area */}
@@ -240,6 +316,9 @@ const UploadDashboard: React.FC = () => {
                         </h3>
                         <p className="text-slate-400 text-sm">
                             Formatos aceitos: MP4, AVI, MOV, MKV, WebM • Tamanho máximo: 2GB
+                        </p>
+                        <p className="text-purple-400 text-sm mt-2">
+                            ⚡ Uploads sequenciais - 1 vídeo por vez
                         </p>
                     </div>
                 </div>
@@ -338,6 +417,15 @@ const UploadDashboard: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* Resume Pending Uploads Modal */}
+            {showResumeModal && (
+                <ResumePendingUploadsModal
+                    pendingCount={pendingCount}
+                    onResume={handleResume}
+                    onDiscard={handleDiscard}
+                />
+            )}
         </div>
     );
 };

@@ -1,12 +1,10 @@
-"""
-Security utilities - Password hashing and JWT token generation
-"""
 from datetime import datetime, timedelta
 from typing import Optional
 import os
 
 from passlib.context import CryptContext
 from jose import JWTError, jwt
+from fastapi import HTTPException, status, Header
 
 # Password hashing configuration
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -68,26 +66,24 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-def get_current_user(authorization: str) -> str:
+def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     """
-    Validate JWT token and return current user ID.
+    Validate JWT token and return current user.
     
     Use as FastAPI dependency to protect endpoints:
         @app.get("/protected")
-        def protected_route(user_id: str = Depends(get_current_user)):
-            return {"user_id": user_id}
+        def protected_route(current_user: dict = Depends(get_current_user)):
+            return {"user_id": current_user["id"]}
     
     Args:
         authorization: Authorization header value (Bearer token)
         
     Returns:
-        User ID from token payload
+        Dictionary with user ID: {"id": user_id}
         
     Raises:
         HTTPException 401: If token is invalid or expired
     """
-    from fastapi import HTTPException, status, Header
-    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Credenciais inválidas ou token expirado",
@@ -112,7 +108,7 @@ def get_current_user(authorization: str) -> str:
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-        return user_id
+        return {"id": user_id}
     except JWTError:
         raise credentials_exception
 

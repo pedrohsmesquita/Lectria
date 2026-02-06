@@ -65,7 +65,8 @@ async def upload_video(
     - 500: Erro no upload ou processamento
     """
     # Step 1: Authenticate user
-    user_id = get_current_user(authorization)
+    current_user = get_current_user(authorization)
+    user_id = current_user["id"]
     
     # Step 2: Validate file type
     if file.content_type not in ALLOWED_VIDEO_TYPES:
