@@ -66,3 +66,53 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     
     return encoded_jwt
+
+
+def get_current_user(authorization: str) -> str:
+    """
+    Validate JWT token and return current user ID.
+    
+    Use as FastAPI dependency to protect endpoints:
+        @app.get("/protected")
+        def protected_route(user_id: str = Depends(get_current_user)):
+            return {"user_id": user_id}
+    
+    Args:
+        authorization: Authorization header value (Bearer token)
+        
+    Returns:
+        User ID from token payload
+        
+    Raises:
+        HTTPException 401: If token is invalid or expired
+    """
+    from fastapi import HTTPException, status, Header
+    
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Credenciais inválidas ou token expirado",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    # Check if authorization header exists
+    if not authorization:
+        raise credentials_exception
+    
+    # Extract token from "Bearer <token>"
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise credentials_exception
+    except ValueError:
+        raise credentials_exception
+    
+    # Decode and validate token
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+        return user_id
+    except JWTError:
+        raise credentials_exception
+

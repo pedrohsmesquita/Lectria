@@ -8,6 +8,7 @@ import os
 
 from database import get_db, check_database_connection
 from routes.auth_routes import router as auth_router
+from routes.video_routes import router as video_router
 
 app = FastAPI(
     title="Video to Book API",
@@ -26,6 +27,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth_router)
+app.include_router(video_router)
 
 @app.get("/")
 async def root():
