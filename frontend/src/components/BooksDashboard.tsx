@@ -171,6 +171,7 @@ const BooksDashboard: React.FC = () => {
                         {books.map((book) => (
                             <div
                                 key={book.id}
+                                onClick={() => navigate(`/books/${book.id}/structure`)}
                                 className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 overflow-hidden hover:bg-white/[0.15] transition-all hover:scale-[1.02] cursor-pointer group"
                             >
                                 <div className="p-6">
