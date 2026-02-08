@@ -6,13 +6,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from uuid import UUID, uuid4
 from typing import Optional
+import os
+import shutil
 
 from database import get_db
 from models.videos import Videos
 from models.books import Books
 from schemas.video_schemas import VideoUploadResponse, VideoMetadata
 from security import get_current_user
-from gemini_service import upload_and_process_video
 
 router = APIRouter(prefix="/videos", tags=["Videos"])
 
@@ -36,15 +37,14 @@ async def upload_video(
     db: Session = Depends(get_db)
 ):
     """
-    Upload de vídeo para Gemini File API e registro no banco de dados.
+    Upload de vídeo para armazenamento local e registro no banco de dados.
     
     **Fluxo:**
     1. Valida autenticação JWT
     2. Valida tipo e tamanho do arquivo
     3. Valida propriedade do livro
-    4. Faz upload para Gemini File API
-    5. Aguarda processamento (status ACTIVE)
-    6. Salva metadados no banco de dados
+    4. Salva arquivo localmente em media_storage
+    5. Salva metadados no banco de dados
     
     **Requisitos:**
     - Token JWT válido no header Authorization
@@ -53,8 +53,8 @@ async def upload_video(
     
     **Retorna:**
     - ID do vídeo criado
-    - URI do arquivo no Gemini
-    - Status do processamento
+    - Caminho local do arquivo
+    - Status do upload
     - Metadados do vídeo
     
     **Erros:**
@@ -62,7 +62,7 @@ async def upload_video(
     - 400: Tipo de arquivo inválido ou tamanho excedido
     - 403: Livro não pertence ao usuário
     - 404: Livro não encontrado
-    - 500: Erro no upload ou processamento
+    - 500: Erro no upload ou salvamento
     """
     # Step 1: Authenticate user
     current_user = get_current_user(authorization)
@@ -110,29 +110,39 @@ async def upload_video(
             detail="Você não tem permissão para adicionar vídeos a este livro"
         )
     
-    # Step 6: Create video record in database (to get UUID for Gemini display_name)
+    # Step 6: Create video record ID
     video_id = uuid4()
     
     try:
-        # Step 7: Upload to Gemini and get metadata
-        file_uri, file_status, duration = upload_and_process_video(
-            file=file,
-            video_id=str(video_id)
-        )
+        # Step 7: Get media storage path and create hierarchical structure
+        media_storage_path = os.getenv("MEDIA_STORAGE_PATH", "/app/media")
         
-        # Step 8: Save to database
+        # Create directory structure: media_storage/{user_id}/{book_id}/
+        book_folder = os.path.join(media_storage_path, str(user_id), str(book_uuid))
+        os.makedirs(book_folder, exist_ok=True)
+        
+        # Step 8: Generate unique filename using video_id to avoid conflicts
+        file_extension = os.path.splitext(file.filename)[1]  # Get original extension
+        unique_filename = f"{video_id}{file_extension}"
+        local_file_path = os.path.join(book_folder, unique_filename)
+        
+        # Step 9: Save file to local storage
+        with open(local_file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Step 10: Save to database
         video_record = Videos(
             id=video_id,
             book_id=book_uuid,
-            storage_path=file_uri,
-            duration=duration,
+            storage_path=local_file_path,
+            duration=0,  # Will be calculated during processing phase
             filename=file.filename
         )
         db.add(video_record)
         db.commit()
         db.refresh(video_record)
         
-        # Step 9: Prepare response
+        # Step 11: Prepare response
         metadata = VideoMetadata(
             filename=video_record.filename,
             duration=video_record.duration,
@@ -144,16 +154,19 @@ async def upload_video(
             id=video_record.id,
             book_id=video_record.book_id,
             file_uri=video_record.storage_path,
-            status=file_status,
+            status="SAVED",
             metadata=metadata,
             message="Upload realizado com sucesso"
         )
         
-    except HTTPException:
-        # Re-raise HTTP exceptions from gemini_service
-        raise
     except Exception as e:
         db.rollback()
+        # Try to clean up file if it was created
+        if 'local_file_path' in locals() and os.path.exists(local_file_path):
+            try:
+                os.remove(local_file_path)
+            except Exception:
+                pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao processar upload: {str(e)}"

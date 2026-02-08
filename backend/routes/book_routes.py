@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
 from uuid import UUID
+import os
 
 from database import get_db
 from models.books import Books
@@ -120,6 +121,11 @@ async def create_book(
     db.add(new_book)
     db.commit()
     db.refresh(new_book)
+    
+    # Create book folder in media_storage/{user_id}/{book_id}
+    media_storage_path = os.getenv("MEDIA_STORAGE_PATH", "/app/media")
+    book_folder = os.path.join(media_storage_path, str(user_id), str(new_book.id))
+    os.makedirs(book_folder, exist_ok=True)
     
     return BookResponse(
         id=new_book.id,

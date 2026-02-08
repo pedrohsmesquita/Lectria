@@ -4,6 +4,7 @@ Authentication Routes - User registration and login endpoints
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+import os
 
 from database import get_db
 from models.user_auth import UserAuth
@@ -65,6 +66,11 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user_auth)
         db.refresh(user_profile)
+        
+        # Create user folder in media_storage
+        media_storage_path = os.getenv("MEDIA_STORAGE_PATH", "/app/media")
+        user_folder = os.path.join(media_storage_path, str(user_auth.id))
+        os.makedirs(user_folder, exist_ok=True)
         
         # Generate JWT token
         access_token = create_access_token(
