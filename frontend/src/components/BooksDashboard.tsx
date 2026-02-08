@@ -212,7 +212,10 @@ const BooksDashboard: React.FC = () => {
 
                                     {/* Action Button */}
                                     <button
-                                        onClick={() => navigate(`/upload/${book.id}`)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate(`/upload/${book.id}`);
+                                        }}
                                         className="w-full py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2 group-hover:bg-purple-600"
                                     >
                                         <Upload className="w-4 h-4" />
