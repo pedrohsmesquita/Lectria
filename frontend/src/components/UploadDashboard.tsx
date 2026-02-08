@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Upload, Video, CheckCircle, XCircle, Loader2, X, FileVideo, ArrowLeft, BookOpen } from 'lucide-react';
+import { Upload, Video, CheckCircle, XCircle, Loader2, X, FileVideo, ArrowLeft, BookOpen, Play } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as uploadQueue from '../utils/uploadQueue';
 import ResumePendingUploadsModal from './ResumePendingUploadsModal';
@@ -31,6 +31,7 @@ const UploadDashboard: React.FC = () => {
     const [bookInfo, setBookInfo] = useState<BookInfo | null>(null);
     const [showResumeModal, setShowResumeModal] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
+    const [processing, setProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const activeUploads = useRef<{ [key: string]: XMLHttpRequest }>({});
 
@@ -282,6 +283,40 @@ const UploadDashboard: React.FC = () => {
         setVideos(prev => prev.filter(v => v.status === 'pending' || v.status === 'uploading'));
     };
 
+    // Handle video processing
+    const handleProcessVideos = async () => {
+        if (!bookId) return;
+
+        try {
+            setProcessing(true);
+
+            const token = localStorage.getItem('access_token');
+            const response = await fetch(
+                `http://localhost:8000/books/${bookId}/process`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                alert(`Processamento iniciado com sucesso! Você pode sair da página.\n\nTask ID: ${data.task_id}`);
+                navigate('/dashboard');
+            } else {
+                const error = await response.json();
+                alert(`Erro ao iniciar processamento: ${error.detail}`);
+            }
+        } catch (error) {
+            console.error('Erro ao iniciar processamento:', error);
+            alert('Erro ao iniciar processamento. Verifique sua conexão.');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
             {/* Background decorations */}
@@ -423,6 +458,32 @@ const UploadDashboard: React.FC = () => {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                )}
+
+                {/* Process Videos Button */}
+                {videos.length > 0 && videos.some(v => v.status === 'success') && (
+                    <div className="mt-6">
+                        <button
+                            onClick={handleProcessVideos}
+                            disabled={processing}
+                            className="w-full py-4 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed text-white rounded-xl transition-all flex items-center justify-center gap-2 font-semibold shadow-lg shadow-green-500/25 hover:shadow-green-500/40"
+                        >
+                            {processing ? (
+                                <>
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    Processando...
+                                </>
+                            ) : (
+                                <>
+                                    <Play className="w-5 h-5" />
+                                    Processar Vídeos
+                                </>
+                            )}
+                        </button>
+                        <p className="text-center text-slate-400 text-sm mt-3">
+                            Inicia a extração de áudio e análise com IA. Você pode sair da página após clicar.
+                        </p>
                     </div>
                 )}
 

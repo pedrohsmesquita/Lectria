@@ -43,6 +43,10 @@ services:
       # Application Settings
       MEDIA_STORAGE_PATH: /app/media
       DEBUG: ${DEBUG:-True}
+
+      # Celery Configuration
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     volumes:
       - ./backend:/app
       - ./media_storage:/app/media
@@ -69,6 +73,53 @@ services:
       - "3000:3000"
     stdin_open: true
     tty: true
+
+  # Redis - Message Broker para Celery
+  redis:
+    image: redis:7-alpine
+    container_name: video_to_book_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Celery Worker - Processamento assíncrono
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: video_to_book_celery
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database Configuration
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-video_to_book}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-video_to_book}
+
+      # Google Gemini API
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+
+      # Application Settings
+      MEDIA_STORAGE_PATH: /app/media
+      DEBUG: ${DEBUG:-True}
+
+      # Celery Configuration
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+      - ./media_storage:/app/media
+    command: celery -A celery_app worker --loglevel=info
 
 volumes:
   postgres_data:
