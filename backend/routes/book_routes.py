@@ -14,6 +14,7 @@ from models.videos import Videos
 from models.user_profiles import UserProfiles
 from schemas.book_schemas import BookCreate, BookResponse, BookDetailResponse
 from security import get_current_user
+from utils.status_translator import translate_status
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -80,6 +81,9 @@ async def list_books(
             title=book.title,
             author=book.author,
             status=book.status,
+            status_display=translate_status(book.status),
+            processing_progress=book.processing_progress,
+            current_step=book.current_step,
             created_at=book.created_at,
             video_count=video_count
         ))
@@ -132,6 +136,9 @@ async def create_book(
         title=new_book.title,
         author=new_book.author,
         status=new_book.status,
+        status_display=translate_status(new_book.status),
+        processing_progress=new_book.processing_progress,
+        current_step=new_book.current_step,
         created_at=new_book.created_at,
         video_count=0
     )
@@ -172,6 +179,9 @@ async def get_book_details(
         title=book.title,
         author=book.author,
         status=book.status,
+        status_display=translate_status(book.status),
+        processing_progress=book.processing_progress,
+        current_step=book.current_step,
         created_at=book.created_at,
         videos=videos_list
     )
