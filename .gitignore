@@ -48,6 +48,10 @@ build/
 # IDEs
 .vscode/
 .idea/
+
+# Test scripts (manual testing only, not for version control)
+backend/test_*.py
+backend/create_test_user.py
 *.swp
 *.swo
 *~
