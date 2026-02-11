@@ -7,6 +7,7 @@ from sqlalchemy import func
 from typing import List
 from uuid import UUID
 import os
+import shutil
 
 from database import get_db
 from models.books import Books
@@ -185,3 +186,43 @@ async def get_book_details(
         created_at=book.created_at,
         videos=videos_list
     )
+
+
+@router.delete("/{book_id}", status_code=status.HTTP_200_OK)
+async def delete_book(
+    book_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a book and all its associated data (videos, chapters, sections, assets).
+    Also removes all media files from disk.
+    Only the book owner can delete the book.
+    """
+    user_id = current_user["id"]
+    
+    # Verify ownership
+    book = verify_book_ownership(book_id, user_id, db)
+    
+    # Get book folder path before deletion
+    media_storage_path = os.getenv("MEDIA_STORAGE_PATH", "/app/media")
+    book_folder = os.path.join(media_storage_path, str(user_id), str(book_id))
+    
+    # Delete book from database (cascade will handle related records)
+    db.delete(book)
+    db.commit()
+    
+    # Clean up media files from disk
+    import shutil
+    if os.path.exists(book_folder):
+        try:
+            shutil.rmtree(book_folder)
+        except Exception as e:
+            # Log error but don't fail the request since DB deletion succeeded
+            print(f"Warning: Failed to delete media folder {book_folder}: {str(e)}")
+    
+    return {
+        "success": True,
+        "message": "Livro excluído com sucesso",
+        "book_id": str(book_id)
+    }

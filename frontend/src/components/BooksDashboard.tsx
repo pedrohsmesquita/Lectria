@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BookOpen, Plus, Upload, Video, Loader2 } from 'lucide-react';
+import { BookOpen, Plus, Upload, Video, Loader2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CreateBookModal from './CreateBookModal';
 import { translateStatus } from '../utils/statusTranslations';
@@ -25,6 +25,8 @@ const BooksDashboard: React.FC = () => {
     const [books, setBooks] = useState<Book[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [deleteConfirmBook, setDeleteConfirmBook] = useState<Book | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     // Fetch books from API
     const fetchBooks = useCallback(async () => {
@@ -102,6 +104,45 @@ const BooksDashboard: React.FC = () => {
         } catch (error) {
             console.error('Error formatting date:', error, dateString);
             return 'Data inválida';
+        }
+    };
+
+    // Handle book deletion
+    const handleDeleteBook = async (book: Book) => {
+        setDeleting(true);
+        try {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                navigate('/login');
+                return;
+            }
+
+            const response = await fetch(`http://localhost:8000/books/${book.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                navigate('/login');
+                return;
+            }
+
+            if (response.ok) {
+                // Remove book from local state
+                setBooks(prev => prev.filter(b => b.id !== book.id));
+                setDeleteConfirmBook(null);
+            } else {
+                const error = await response.json();
+                alert(`Erro ao excluir livro: ${error.detail || 'Erro desconhecido'}`);
+            }
+        } catch (error) {
+            console.error('Error deleting book:', error);
+            alert('Erro ao excluir livro. Tente novamente.');
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -238,17 +279,29 @@ const BooksDashboard: React.FC = () => {
                                         Criado em {formatDate(book.created_at)}
                                     </p>
 
-                                    {/* Action Button */}
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            navigate(`/upload/${book.id}`);
-                                        }}
-                                        className="w-full py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2 group-hover:bg-purple-600"
-                                    >
-                                        <Upload className="w-4 h-4" />
-                                        Adicionar Vídeos
-                                    </button>
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigate(`/upload/${book.id}`);
+                                            }}
+                                            className="flex-1 py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2 group-hover:bg-purple-600"
+                                        >
+                                            <Upload className="w-4 h-4" />
+                                            Adicionar Vídeos
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setDeleteConfirmBook(book);
+                                            }}
+                                            className="py-3 px-4 bg-white/5 hover:bg-red-600 border border-white/10 hover:border-red-500 text-white rounded-lg transition-all flex items-center justify-center"
+                                            title="Excluir livro"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -262,6 +315,54 @@ const BooksDashboard: React.FC = () => {
                     onClose={() => setShowCreateModal(false)}
                     onBookCreated={handleBookCreated}
                 />
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteConfirmBook && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-slate-800 rounded-2xl border border-white/20 p-6 max-w-md w-full shadow-2xl">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
+                                <Trash2 className="w-6 h-6 text-red-400" />
+                            </div>
+                            <h3 className="text-xl font-semibold text-white">Excluir Livro</h3>
+                        </div>
+
+                        <p className="text-slate-300 mb-2">
+                            Tem certeza que deseja excluir o livro <strong className="text-white">"{deleteConfirmBook.title}"</strong>?
+                        </p>
+                        <p className="text-slate-400 text-sm mb-6">
+                            Esta ação não pode ser desfeita. Todos os vídeos e dados relacionados serão permanentemente removidos.
+                        </p>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeleteConfirmBook(null)}
+                                disabled={deleting}
+                                className="flex-1 py-3 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => handleDeleteBook(deleteConfirmBook)}
+                                disabled={deleting}
+                                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {deleting ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Excluindo...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Trash2 className="w-4 h-4" />
+                                        Excluir
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
