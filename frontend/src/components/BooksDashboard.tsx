@@ -27,7 +27,7 @@ const BooksDashboard: React.FC = () => {
     const [showCreateModal, setShowCreateModal] = useState(false);
 
     // Fetch books from API
-    const fetchBooks = async () => {
+    const fetchBooks = useCallback(async () => {
         try {
             const token = localStorage.getItem('access_token');
             if (!token) {
@@ -56,7 +56,7 @@ const BooksDashboard: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [navigate]);
 
     useEffect(() => {
         fetchBooks();
@@ -66,7 +66,7 @@ const BooksDashboard: React.FC = () => {
 
         // Cleanup interval on unmount
         return () => clearInterval(intervalId);
-    }, []);
+    }, [fetchBooks]);
 
     // Handle logout
     const handleLogout = () => {

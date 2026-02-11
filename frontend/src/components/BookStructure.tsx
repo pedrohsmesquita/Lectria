@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BookOpen, ChevronRight, Loader2, Save, X, ArrowLeft, FileText, Video, Clock } from 'lucide-react';
 
@@ -49,7 +49,7 @@ const BookStructure: React.FC = () => {
     const [saving, setSaving] = useState(false);
 
     // Fetch chapters and sections
-    const fetchChapters = async () => {
+    const fetchChapters = useCallback(async () => {
         try {
             const token = localStorage.getItem('access_token');
             if (!token) {
@@ -78,11 +78,11 @@ const BookStructure: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [bookId, navigate]);
 
     useEffect(() => {
         fetchChapters();
-    }, [bookId]);
+    }, [fetchChapters]);
 
     // Handle item selection
     const handleSelectChapter = (chapter: Chapter) => {
@@ -239,8 +239,8 @@ const BookStructure: React.FC = () => {
                                         <div
                                             onClick={() => handleSelectChapter(chapter)}
                                             className={`p-4 rounded-lg cursor-pointer transition-all ${selectedItem?.type === 'chapter' && selectedItem.data.id === chapter.id
-                                                    ? 'bg-purple-600/30 border-2 border-purple-500'
-                                                    : 'bg-white/5 hover:bg-white/10 border-2 border-transparent'
+                                                ? 'bg-purple-600/30 border-2 border-purple-500'
+                                                : 'bg-white/5 hover:bg-white/10 border-2 border-transparent'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-2">
@@ -258,8 +258,8 @@ const BookStructure: React.FC = () => {
                                                     key={section.id}
                                                     onClick={() => handleSelectSection(section)}
                                                     className={`p-3 rounded-lg cursor-pointer transition-all ${selectedItem?.type === 'section' && selectedItem.data.id === section.id
-                                                            ? 'bg-indigo-600/30 border-2 border-indigo-500'
-                                                            : 'bg-white/5 hover:bg-white/10 border-2 border-transparent'
+                                                        ? 'bg-indigo-600/30 border-2 border-indigo-500'
+                                                        : 'bg-white/5 hover:bg-white/10 border-2 border-transparent'
                                                         }`}
                                                 >
                                                     <div className="flex items-center justify-between">
