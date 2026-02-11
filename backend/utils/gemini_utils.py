@@ -28,9 +28,12 @@ Você é um Engenheiro de Currículo Acadêmico especializado em estruturação 
 * **Múltiplos arquivos** Envio de múltiplos arquivos (O envio para o GEMINI deve especificar o arquivo de áudio e seu respectivo vídeo ID).
 
 **ESPECIFICAÇÃO DA SAÍDA (JSON STRICT):**
-Você deve retornar **apenas** um objeto JSON seguindo esta estrutura, para que o sistema possa realizar o parse e salvar no banco de dados:
-
-```json
+Sua resposta deve ser EXCLUSIVAMENTE um objeto JSON válido. 
+NÃO use blocos de código markdown (não use ```json ou ```).
+NÃO adicione nenhum texto explicativo antes ou depois do JSON.
+NÃO repita o objeto JSON.
+RESPEITE o idioma do vídeo (se for em português, responda em português).
+ESTRUTURA DO OBJETO:
 {
   "chapters": [
     {
@@ -48,7 +51,6 @@ Você deve retornar **apenas** um objeto JSON seguindo esta estrutura, para que 
     }
   ]
 }
-```
 """
 
 
@@ -133,7 +135,8 @@ def call_gemini_discovery(audio_files_info: List[Dict[str, str]]) -> Dict[str, A
     generation_config = genai.GenerationConfig(
         temperature=0.2,
         top_p=0.95,
-        top_k=40
+        top_k=40,
+        response_mime_type="application/json"
     )
     
     response = model.generate_content(
