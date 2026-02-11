@@ -244,7 +244,7 @@ const AuthPage: React.FC = () => {
                         {/* Forgot Password - Login only */}
                         {mode === 'login' && (
                             <div className="text-right">
-                                <a href="#" className="text-sm text-purple-400 hover:text-purple-300 transition-colors">
+                                <a href="#!" className="text-sm text-purple-400 hover:text-purple-300 transition-colors">
                                     Esqueceu a senha?
                                 </a>
                             </div>
@@ -276,11 +276,11 @@ const AuthPage: React.FC = () => {
                 {/* Footer */}
                 <p className="text-center text-slate-500 text-sm mt-6">
                     Ao continuar, você concorda com nossos{' '}
-                    <a href="#" className="text-purple-400 hover:text-purple-300 transition-colors">
+                    <a href="#!" className="text-purple-400 hover:text-purple-300 transition-colors">
                         Termos de Uso
                     </a>{' '}
                     e{' '}
-                    <a href="#" className="text-purple-400 hover:text-purple-300 transition-colors">
+                    <a href="#!" className="text-purple-400 hover:text-purple-300 transition-colors">
                         Política de Privacidade
                     </a>
                 </p>

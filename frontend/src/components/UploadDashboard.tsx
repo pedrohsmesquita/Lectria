@@ -40,7 +40,7 @@ const UploadDashboard: React.FC = () => {
     const MAX_PARALLEL_UPLOADS = 1; // Changed from 3 to 1 (sequential uploads)
 
     // Fetch book information
-    const fetchBookInfo = async () => {
+    const fetchBookInfo = useCallback(async () => {
         if (!bookId) return;
 
         try {
@@ -58,7 +58,7 @@ const UploadDashboard: React.FC = () => {
         } catch (error) {
             console.error('Error fetching book info:', error);
         }
-    };
+    }, [bookId, navigate]);
 
     // Load queue from IndexedDB on mount
     useEffect(() => {
@@ -84,7 +84,7 @@ const UploadDashboard: React.FC = () => {
 
         fetchBookInfo();
         loadQueue();
-    }, [bookId]);
+    }, [bookId, fetchBookInfo]);
 
     // Handle resume decision
     const handleResume = async () => {
@@ -119,7 +119,7 @@ const UploadDashboard: React.FC = () => {
     };
 
     // Upload single video
-    const uploadVideo = async (videoFile: VideoFile) => {
+    const uploadVideo = useCallback(async (videoFile: VideoFile) => {
         if (!bookId) return;
 
         const formData = new FormData();
@@ -183,7 +183,7 @@ const UploadDashboard: React.FC = () => {
             xhr.setRequestHeader('Authorization', `Bearer ${token}`);
             xhr.send(formData);
         });
-    };
+    }, [bookId]);
 
     // Process upload queue (sequential - 1 at a time)
     const processQueue = useCallback(async () => {
@@ -203,7 +203,7 @@ const UploadDashboard: React.FC = () => {
 
             uploadVideo(video).catch(console.error);
         }
-    }, [videos]);
+    }, [videos, uploadVideo]);
 
     // Auto-process queue when videos change
     useEffect(() => {
