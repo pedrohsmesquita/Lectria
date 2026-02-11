@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BookOpen, Plus, Upload, Video, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CreateBookModal from './CreateBookModal';
@@ -23,7 +23,7 @@ const BooksDashboard: React.FC = () => {
     const [showCreateModal, setShowCreateModal] = useState(false);
 
     // Fetch books from API
-    const fetchBooks = async () => {
+    const fetchBooks = useCallback(async () => {
         try {
             const token = localStorage.getItem('access_token');
             if (!token) {
@@ -52,11 +52,11 @@ const BooksDashboard: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [navigate]);
 
     useEffect(() => {
         fetchBooks();
-    }, []);
+    }, [fetchBooks]);
 
     // Handle logout
     const handleLogout = () => {
