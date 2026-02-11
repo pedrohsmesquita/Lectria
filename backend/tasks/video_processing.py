@@ -52,10 +52,12 @@ def process_book_videos(self, book_id: str):
         
         print(f"[Task] Livro encontrado: {book.title}")
         
-        book.status = "PROCESSING"
+        book.status = "EXTRACTING_AUDIO"
+        book.processing_progress = 0
+        book.current_step = "Extraindo áudio dos vídeos"
         db.commit()
         
-        print(f"[Task] Status atualizado para PROCESSING")
+        print(f"[Task] Status atualizado para EXTRACTING_AUDIO")
         
         # 2. Buscar todos os vídeos do livro
         videos = db.query(Videos).filter(Videos.book_id == UUID(book_id)).all()
@@ -91,11 +93,21 @@ def process_book_videos(self, book_id: str):
                 "audio_path": audio_path
             })
             
-            print(f"[Task] Áudio extraído: {audio_path}")
+            # Atualizar progresso (0-30% para extração de áudio)
+            progress = int((idx / len(videos)) * 30)
+            book.processing_progress = progress
+            db.commit()
+            
+            print(f"[Task] Áudio extraído: {audio_path} (Progresso: {progress}%)")
         
         print(f"[Task] Todos os áudios extraídos com sucesso")
         
         # 5. Upload dos áudios para Gemini
+        book.status = "UPLOADING_TO_GEMINI"
+        book.processing_progress = 30
+        book.current_step = "Enviando áudios para análise"
+        db.commit()
+        
         gemini_files = []
         
         for idx, extraction in enumerate(audio_extractions, 1):
@@ -111,18 +123,34 @@ def process_book_videos(self, book_id: str):
                 "file_name": file_name
             })
             
-            print(f"[Task] Upload concluído: {file_name}")
+            # Atualizar progresso (30-60% para upload)
+            progress = 30 + int((idx / len(audio_extractions)) * 30)
+            book.processing_progress = progress
+            db.commit()
+            
+            print(f"[Task] Upload concluído: {file_name} (Progresso: {progress}%)")
         
         print(f"[Task] Todos os uploads concluídos")
         
         # 6. Chamar Gemini Discovery
+        book.status = "ANALYZING_CONTENT"
+        book.processing_progress = 60
+        book.current_step = "Analisando conteúdo com IA"
+        db.commit()
+        
         print(f"[Task] Iniciando fase Discovery com Gemini 2.5 Flash")
         
         discovery_result = call_gemini_discovery(gemini_files)
         
+        book.processing_progress = 80
+        db.commit()
+        
         print(f"[Task] Discovery concluída. Salvando no banco de dados...")
         
         # 7. Salvar chapters e sections no banco
+        book.status = "GENERATING_STRUCTURE"
+        book.current_step = "Gerando estrutura do livro"
+        db.commit()
         for chapter_data in discovery_result["chapters"]:
             chapter = Chapters(
                 book_id=UUID(book_id),
@@ -148,8 +176,10 @@ def process_book_videos(self, book_id: str):
                 
                 print(f"[Task]   Seção criada: {section.title} ({section.start_time}s - {section.end_time}s)")
         
-        # 8. Atualizar status do livro para DISCOVERY_COMPLETE
-        book.status = "DISCOVERY_COMPLETE"
+        # 8. Atualizar status do livro para COMPLETED
+        book.status = "COMPLETED"
+        book.processing_progress = 100
+        book.current_step = "Processamento concluído"
         db.commit()
         
         print(f"[Task] Status atualizado para DISCOVERY_COMPLETE")

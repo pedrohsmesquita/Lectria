@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BookOpen, Plus, Upload, Video, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CreateBookModal from './CreateBookModal';
+import { translateStatus } from '../utils/statusTranslations';
 
 // ============================================
 // BooksDashboard Component - List all books
@@ -12,6 +13,9 @@ interface Book {
     title: string;
     author: string;
     status: string;
+    status_display?: string;  // Status traduzido do backend
+    processing_progress?: number;  // 0-100
+    current_step?: string;  // Etapa atual
     created_at: string;
     video_count: number;
 }
@@ -56,6 +60,12 @@ const BooksDashboard: React.FC = () => {
 
     useEffect(() => {
         fetchBooks();
+
+        // Poll for updates every 5 seconds
+        const intervalId = setInterval(fetchBooks, 5000);
+
+        // Cleanup interval on unmount
+        return () => clearInterval(intervalId);
     }, []);
 
     // Handle logout
@@ -97,13 +107,14 @@ const BooksDashboard: React.FC = () => {
 
     // Get status badge color
     const getStatusColor = (status: string): string => {
-        switch (status) {
-            case 'COMPLETED':
-                return 'bg-green-500/20 text-green-400 border-green-500/30';
-            case 'PROCESSING':
-                return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-            default:
-                return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+        if (['COMPLETED', 'SUCCESS'].includes(status)) {
+            return 'bg-green-500/20 text-green-400 border-green-500/30';
+        } else if (['PROCESSING', 'EXTRACTING_AUDIO', 'UPLOADING_TO_GEMINI', 'ANALYZING_CONTENT', 'GENERATING_STRUCTURE'].includes(status)) {
+            return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+        } else if (status === 'ERROR') {
+            return 'bg-red-500/20 text-red-400 border-red-500/30';
+        } else {
+            return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
         }
     };
 
@@ -191,10 +202,27 @@ const BooksDashboard: React.FC = () => {
                                     </p>
 
                                     {/* Status Badge */}
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(book.status)}`}>
-                                            {book.status}
-                                        </span>
+                                    <div className="mb-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(book.status)}`}>
+                                                {book.status_display || translateStatus(book.status)}
+                                            </span>
+                                        </div>
+
+                                        {/* Progress Bar */}
+                                        {book.processing_progress != null && book.processing_progress < 100 && (
+                                            <div className="space-y-1">
+                                                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500"
+                                                        style={{ width: `${book.processing_progress}%` }}
+                                                    ></div>
+                                                </div>
+                                                {book.current_step && (
+                                                    <p className="text-xs text-slate-400">{book.current_step}</p>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Video Count */}

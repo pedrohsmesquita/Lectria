@@ -3,6 +3,7 @@ import { Upload, Video, CheckCircle, XCircle, Loader2, X, FileVideo, ArrowLeft, 
 import { useNavigate, useParams } from 'react-router-dom';
 import * as uploadQueue from '../utils/uploadQueue';
 import ResumePendingUploadsModal from './ResumePendingUploadsModal';
+import { translateStatus } from '../utils/statusTranslations';
 
 // ============================================
 // UploadDashboard Component - Video Upload
@@ -90,7 +91,17 @@ const UploadDashboard: React.FC = () => {
     const handleResume = async () => {
         if (!bookId) return;
         const queueItems = await uploadQueue.getQueueForBook(bookId);
-        setVideos(queueItems);
+
+        // Reset 'uploading' to 'pending' to restart interrupted uploads
+        const updatedItems = await Promise.all(queueItems.map(async (item) => {
+            if (item.status === 'uploading') {
+                await uploadQueue.updateVideoStatus(item.id, 'pending', 0);
+                return { ...item, status: 'pending' as const, progress: 0 };
+            }
+            return item;
+        }));
+
+        setVideos(updatedItems);
         setShowResumeModal(false);
     };
 

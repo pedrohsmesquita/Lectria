@@ -22,9 +22,9 @@ Você é um Engenheiro de Currículo Acadêmico especializado em estruturação 
 
 **DIRETRIZES TÉCNICAS:**
 
-* **Granularidade:** Cada seção deve ter, idealmente, entre 3 a 10 minutos de conteúdo. Seções muito curtas devem ser agrupadas; seções muito longas devem ser divididas.
-* **Nomenclatura:** Os títulos de capítulos e seções devem ser profissionais, acadêmicos e convidativos, removendo vícios de linguagem do professor (ex: em vez de "Aula 1 - Parte A", use "Fundamentos da Termodinâmica").
-* **Continuidade:** Garanta que o `end_time` de uma seção conecte-se logicamente com o `start_time` da próxima.
+* **Granularidade:** Cada seção deve ter, idealmente, entre 3 a 10 minutos de conteúdo. Seções muito curtas devem ser agrupadas; seções muito longas devem ser divididas. Priorize uma estrutura robusta com mais seções em vez de poucas. Seja exaustivo e detalhado na quebra do conteúdo.
+* **Nomenclatura:** Os títulos de capítulos e seções devem ser profissionais, acadêmicos e convidativos, removendo vícios de linguagem do professor. Evite títulos genéricos; use os conceitos técnicos abordados no trecho.
+* **Continuidade:** Garanta que o `end_time` de uma seção conecte-se logicamente com o `start_time` da próxima. Evite agrupar muitos tópicos em uma única seção; divida para conquistar.
 * **Múltiplos arquivos** Envio de múltiplos arquivos (O envio para o GEMINI deve especificar o arquivo de áudio e seu respectivo vídeo ID).
 
 **ESPECIFICAÇÃO DA SAÍDA (JSON STRICT):**
@@ -129,8 +129,17 @@ def call_gemini_discovery(audio_files_info: List[Dict[str, str]]) -> Dict[str, A
     
     print("Enviando requisição ao Gemini 2.5 Flash...")
     
-    # Gerar conteúdo
-    response = model.generate_content(prompt_parts)
+    # Gerar conteúdo com configurações de temperatura reduzida
+    generation_config = genai.GenerationConfig(
+        temperature=0.2,
+        top_p=0.95,
+        top_k=40
+    )
+    
+    response = model.generate_content(
+        prompt_parts,
+        generation_config=generation_config
+    )
     
     print("Resposta recebida. Parseando JSON...")
     

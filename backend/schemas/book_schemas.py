@@ -26,6 +26,9 @@ class BookResponse(BaseModel):
     title: str
     author: str
     status: str
+    status_display: Optional[str] = Field(None, description="Status traduzido para português")
+    processing_progress: int = Field(default=0, description="Progresso do processamento (0-100)")
+    current_step: Optional[str] = Field(None, description="Etapa atual do processamento")
     created_at: datetime
     video_count: int = Field(default=0, description="Number of videos in this book")
 
@@ -42,6 +45,9 @@ class BookDetailResponse(BaseModel):
     title: str
     author: str
     status: str
+    status_display: Optional[str] = Field(None, description="Status traduzido para português")
+    processing_progress: int = Field(default=0, description="Progresso do processamento (0-100)")
+    current_step: Optional[str] = Field(None, description="Etapa atual do processamento")
     created_at: datetime
     videos: list[dict] = Field(default_factory=list, description="List of videos in this book")
 
