@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Upload, FileText, FilePlus, CheckCircle, XCircle, Loader2, X, ArrowLeft, BookOpen, Play, File } from 'lucide-react';
+import { FileText, FilePlus, CheckCircle, XCircle, Loader2, X, ArrowLeft, BookOpen, Play, File } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 // ============================================
@@ -286,8 +286,8 @@ const TranscriptUploadDashboard: React.FC = () => {
                         onDrop={handleTranscriptDrop}
                         onClick={() => transcriptInputRef.current?.click()}
                         className={`bg-white/10 backdrop-blur-xl rounded-3xl border-2 border-dashed transition-all cursor-pointer ${isDraggingTranscript
-                                ? 'border-purple-400 bg-purple-500/10 scale-[1.02]'
-                                : 'border-white/20 hover:border-purple-400/50 hover:bg-white/[0.15]'
+                            ? 'border-purple-400 bg-purple-500/10 scale-[1.02]'
+                            : 'border-white/20 hover:border-purple-400/50 hover:bg-white/[0.15]'
                             }`}
                     >
                         <div className="p-8 text-center">
@@ -319,8 +319,8 @@ const TranscriptUploadDashboard: React.FC = () => {
                         onDrop={handlePdfDrop}
                         onClick={() => pdfInputRef.current?.click()}
                         className={`bg-white/10 backdrop-blur-xl rounded-3xl border-2 border-dashed transition-all cursor-pointer ${isDraggingPdf
-                                ? 'border-indigo-400 bg-indigo-500/10 scale-[1.02]'
-                                : 'border-white/20 hover:border-indigo-400/50 hover:bg-white/[0.15]'
+                            ? 'border-indigo-400 bg-indigo-500/10 scale-[1.02]'
+                            : 'border-white/20 hover:border-indigo-400/50 hover:bg-white/[0.15]'
                             }`}
                     >
                         <div className="p-8 text-center">
@@ -386,8 +386,8 @@ const TranscriptUploadDashboard: React.FC = () => {
                                     <div className="flex items-start gap-4">
                                         {/* Icon */}
                                         <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${fileItem.status === 'success' ? 'bg-green-500/20' :
-                                                fileItem.status === 'error' ? 'bg-red-500/20' :
-                                                    fileItem.type === 'transcript' ? 'bg-purple-500/20' : 'bg-indigo-500/20'
+                                            fileItem.status === 'error' ? 'bg-red-500/20' :
+                                                fileItem.type === 'transcript' ? 'bg-purple-500/20' : 'bg-indigo-500/20'
                                             }`}>
                                             {fileItem.status === 'success' && <CheckCircle className="w-6 h-6 text-green-400" />}
                                             {fileItem.status === 'error' && <XCircle className="w-6 h-6 text-red-400" />}
@@ -403,8 +403,8 @@ const TranscriptUploadDashboard: React.FC = () => {
                                                         {fileItem.file.name}
                                                     </h3>
                                                     <span className={`text-xs px-2 py-1 rounded-full ${fileItem.type === 'transcript'
-                                                            ? 'bg-purple-500/20 text-purple-300'
-                                                            : 'bg-indigo-500/20 text-indigo-300'
+                                                        ? 'bg-purple-500/20 text-purple-300'
+                                                        : 'bg-indigo-500/20 text-indigo-300'
                                                         }`}>
                                                         {fileItem.type === 'transcript' ? 'Transcrição' : 'PDF'}
                                                     </span>

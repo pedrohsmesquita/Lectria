@@ -3,7 +3,6 @@ import { Upload, Video, CheckCircle, XCircle, Loader2, X, FileVideo, ArrowLeft, 
 import { useNavigate, useParams } from 'react-router-dom';
 import * as uploadQueue from '../utils/uploadQueue';
 import ResumePendingUploadsModal from './ResumePendingUploadsModal';
-import { translateStatus } from '../utils/statusTranslations';
 
 // ============================================
 // UploadDashboard Component - Video Upload

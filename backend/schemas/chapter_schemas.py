@@ -11,7 +11,7 @@ class SectionResponse(BaseModel):
     """Response schema for section data"""
     id: UUID = Field(..., description="Section unique identifier")
     chapter_id: UUID = Field(..., description="Parent chapter ID")
-    video_id: UUID = Field(..., description="Source video ID")
+    video_id: Optional[UUID] = Field(None, description="Source video ID")
     title: str = Field(..., description="Section title")
     order: int = Field(..., description="Position within chapter")
     start_time: float = Field(..., description="Start timestamp in seconds")

@@ -14,14 +14,15 @@ from models.books import Books
 from models.transcriptions import Transcription
 from models.slides import Slide
 from security import get_current_user
+from tasks.transcript_tasks import process_book_transcripts_task
 
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_transcripts(
-    book_id: UUID = Form(...),
-    transcripts: List[UploadFile] = File(...),
-    pdfs: Optional[List[UploadFile]] = File(None),
+    book_id: str = Form(...),
+    transcripts: List[UploadFile] = File(default=[]),
+    pdfs: List[UploadFile] = File(default=[]),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

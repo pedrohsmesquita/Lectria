@@ -8,7 +8,7 @@ celery_app = Celery(
     "video_to_book",
     broker=os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
     backend=os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"),
-    include=["tasks.video_processing"]
+    include=["tasks.video_processing", "tasks.transcript_tasks"]
 )
 
 celery_app.conf.update(
