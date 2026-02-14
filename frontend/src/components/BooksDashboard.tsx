@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BookOpen, Plus, Upload, Video, Loader2, Trash2 } from 'lucide-react';
+import { BookOpen, Plus, Upload, Video, Loader2, Trash2, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CreateBookModal from './CreateBookModal';
 import { translateStatus } from '../utils/statusTranslations';
@@ -223,10 +223,25 @@ const BooksDashboard: React.FC = () => {
                         {books.map((book) => (
                             <div
                                 key={book.id}
-                                onClick={() => navigate(`/books/${book.id}/structure`)}
-                                className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 overflow-hidden hover:bg-white/[0.15] transition-all hover:scale-[1.02] cursor-pointer group"
+                                className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 overflow-hidden hover:bg-white/[0.15] transition-all hover:scale-[1.02] group relative"
                             >
-                                <div className="p-6">
+                                {/* Delete Button - Top Right Corner */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleteConfirmBook(book);
+                                    }}
+                                    className="absolute top-4 right-4 p-2 bg-white/5 hover:bg-red-600 border border-white/10 hover:border-red-500 text-slate-400 hover:text-white rounded-lg transition-all z-10"
+                                    title="Excluir livro"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+
+                                {/* Clickable Card Content */}
+                                <div
+                                    onClick={() => navigate(`/books/${book.id}/structure`)}
+                                    className="p-6 cursor-pointer"
+                                >
                                     {/* Book Icon */}
                                     <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg shadow-purple-500/25 mb-4">
                                         <BookOpen className="w-7 h-7 text-white" />
@@ -244,24 +259,34 @@ const BooksDashboard: React.FC = () => {
 
                                     {/* Status Badge */}
                                     <div className="mb-4">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(book.status)}`}>
-                                                {book.status_display || translateStatus(book.status)}
-                                            </span>
-                                        </div>
-
-                                        {/* Progress Bar */}
-                                        {book.processing_progress != null && book.processing_progress < 100 && (
-                                            <div className="space-y-1">
-                                                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500"
-                                                        style={{ width: `${book.processing_progress}%` }}
-                                                    ></div>
+                                        {book.video_count > 0 ? (
+                                            <>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(book.status)}`}>
+                                                        {book.status_display || translateStatus(book.status)}
+                                                    </span>
                                                 </div>
-                                                {book.current_step && (
-                                                    <p className="text-xs text-slate-400">{book.current_step}</p>
+
+                                                {/* Progress Bar */}
+                                                {book.processing_progress != null && book.processing_progress < 100 && (
+                                                    <div className="space-y-1">
+                                                        <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                                                            <div
+                                                                className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500"
+                                                                style={{ width: `${book.processing_progress}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        {book.current_step && (
+                                                            <p className="text-xs text-slate-400">{book.current_step}</p>
+                                                        )}
+                                                    </div>
                                                 )}
+                                            </>
+                                        ) : (
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="px-3 py-1 rounded-full text-xs font-medium border border-slate-600 bg-slate-800/50 text-slate-400">
+                                                    Aguardando conteúdo
+                                                </span>
                                             </div>
                                         )}
                                     </div>
@@ -286,20 +311,20 @@ const BooksDashboard: React.FC = () => {
                                                 e.stopPropagation();
                                                 navigate(`/upload/${book.id}`);
                                             }}
-                                            className="flex-1 py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2 group-hover:bg-purple-600"
+                                            className="flex-1 py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2"
                                         >
                                             <Upload className="w-4 h-4" />
-                                            Adicionar Vídeos
+                                            Enviar vídeo
                                         </button>
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                setDeleteConfirmBook(book);
+                                                navigate(`/upload-transcript/${book.id}`);
                                             }}
-                                            className="py-3 px-4 bg-white/5 hover:bg-red-600 border border-white/10 hover:border-red-500 text-white rounded-lg transition-all flex items-center justify-center"
-                                            title="Excluir livro"
+                                            className="flex-1 py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2"
                                         >
-                                            <Trash2 className="w-4 h-4" />
+                                            <FileText className="w-4 h-4" />
+                                            Enviar transcrição
                                         </button>
                                     </div>
                                 </div>
