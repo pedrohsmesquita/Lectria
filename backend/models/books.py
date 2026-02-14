@@ -31,5 +31,11 @@ class Books(Base):
     # Relationship to Chapters (one-to-many)
     chapters = relationship("Chapters", back_populates="book", cascade="all, delete-orphan")
 
+    # Relationship to Transcriptions (one-to-many)
+    transcriptions = relationship("Transcription", back_populates="book", cascade="all, delete-orphan")
+
+    # Relationship to Slides (one-to-many)
+    slides = relationship("Slide", back_populates="book", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<Books(id={self.id}, title={self.title}, status={self.status})>"
