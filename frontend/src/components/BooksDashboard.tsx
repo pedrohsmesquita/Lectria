@@ -223,10 +223,25 @@ const BooksDashboard: React.FC = () => {
                         {books.map((book) => (
                             <div
                                 key={book.id}
-                                onClick={() => navigate(`/books/${book.id}/structure`)}
-                                className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 overflow-hidden hover:bg-white/[0.15] transition-all hover:scale-[1.02] cursor-pointer group"
+                                className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 overflow-hidden hover:bg-white/[0.15] transition-all hover:scale-[1.02] group relative"
                             >
-                                <div className="p-6">
+                                {/* Delete Button - Top Right Corner */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleteConfirmBook(book);
+                                    }}
+                                    className="absolute top-4 right-4 p-2 bg-white/5 hover:bg-red-600 border border-white/10 hover:border-red-500 text-slate-400 hover:text-white rounded-lg transition-all z-10"
+                                    title="Excluir livro"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+
+                                {/* Clickable Card Content */}
+                                <div
+                                    onClick={() => navigate(`/books/${book.id}/structure`)}
+                                    className="p-6 cursor-pointer"
+                                >
                                     {/* Book Icon */}
                                     <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg shadow-purple-500/25 mb-4">
                                         <BookOpen className="w-7 h-7 text-white" />
@@ -286,8 +301,9 @@ const BooksDashboard: React.FC = () => {
                                                 e.stopPropagation();
                                                 navigate(`/upload/${book.id}`);
                                             }}
-                                            className="flex-1 py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2 group-hover:bg-purple-600"
+                                            className="flex-1 py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2"
                                         >
+                                            <Upload className="w-4 h-4" />
                                             Enviar vídeo
                                         </button>
                                         <button
@@ -295,19 +311,10 @@ const BooksDashboard: React.FC = () => {
                                                 e.stopPropagation();
                                                 navigate(`/upload-transcript/${book.id}`);
                                             }}
-                                            className="flex-1 py-3 bg-white/5 hover:bg-indigo-600 border border-white/10 hover:border-indigo-500 text-white rounded-lg transition-all flex items-center justify-center gap-2 group-hover:bg-indigo-600"
+                                            className="flex-1 py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2"
                                         >
+                                            <FileText className="w-4 h-4" />
                                             Enviar transcrição
-                                        </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setDeleteConfirmBook(book);
-                                            }}
-                                            className="py-3 px-4 bg-white/5 hover:bg-red-600 border border-white/10 hover:border-red-500 text-white rounded-lg transition-all flex items-center justify-center"
-                                            title="Excluir livro"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>
                                 </div>
