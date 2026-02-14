@@ -259,24 +259,34 @@ const BooksDashboard: React.FC = () => {
 
                                     {/* Status Badge */}
                                     <div className="mb-4">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(book.status)}`}>
-                                                {book.status_display || translateStatus(book.status)}
-                                            </span>
-                                        </div>
-
-                                        {/* Progress Bar */}
-                                        {book.processing_progress != null && book.processing_progress < 100 && (
-                                            <div className="space-y-1">
-                                                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500"
-                                                        style={{ width: `${book.processing_progress}%` }}
-                                                    ></div>
+                                        {book.video_count > 0 ? (
+                                            <>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(book.status)}`}>
+                                                        {book.status_display || translateStatus(book.status)}
+                                                    </span>
                                                 </div>
-                                                {book.current_step && (
-                                                    <p className="text-xs text-slate-400">{book.current_step}</p>
+
+                                                {/* Progress Bar */}
+                                                {book.processing_progress != null && book.processing_progress < 100 && (
+                                                    <div className="space-y-1">
+                                                        <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                                                            <div
+                                                                className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500"
+                                                                style={{ width: `${book.processing_progress}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        {book.current_step && (
+                                                            <p className="text-xs text-slate-400">{book.current_step}</p>
+                                                        )}
+                                                    </div>
                                                 )}
+                                            </>
+                                        ) : (
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="px-3 py-1 rounded-full text-xs font-medium border border-slate-600 bg-slate-800/50 text-slate-400">
+                                                    Aguardando conteúdo
+                                                </span>
                                             </div>
                                         )}
                                     </div>
