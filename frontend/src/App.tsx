@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AuthPage from './components/AuthPage';
 import BooksDashboard from './components/BooksDashboard';
 import UploadDashboard from './components/UploadDashboard';
+import TranscriptUploadDashboard from './components/TranscriptUploadDashboard';
 import BookStructure from './components/BookStructure';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -25,6 +26,14 @@ function App() {
           element={
             <ProtectedRoute>
               <UploadDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/upload-transcript/:bookId"
+          element={
+            <ProtectedRoute>
+              <TranscriptUploadDashboard />
             </ProtectedRoute>
           }
         />

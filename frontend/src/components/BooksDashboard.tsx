@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BookOpen, Plus, Upload, Video, Loader2, Trash2 } from 'lucide-react';
+import { BookOpen, Plus, Upload, Video, Loader2, Trash2, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CreateBookModal from './CreateBookModal';
 import { translateStatus } from '../utils/statusTranslations';
@@ -288,8 +288,16 @@ const BooksDashboard: React.FC = () => {
                                             }}
                                             className="flex-1 py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2 group-hover:bg-purple-600"
                                         >
-                                            <Upload className="w-4 h-4" />
-                                            Adicionar Vídeos
+                                            Enviar vídeo
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigate(`/upload-transcript/${book.id}`);
+                                            }}
+                                            className="flex-1 py-3 bg-white/5 hover:bg-indigo-600 border border-white/10 hover:border-indigo-500 text-white rounded-lg transition-all flex items-center justify-center gap-2 group-hover:bg-indigo-600"
+                                        >
+                                            Enviar transcrição
                                         </button>
                                         <button
                                             onClick={(e) => {
