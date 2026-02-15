@@ -1,7 +1,7 @@
 """
 SectionAssets Model - Images extracted from video sections
 """
-from sqlalchemy import Column, String, Float, Text, ForeignKey
+from sqlalchemy import Column, String, Integer, Float, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 import uuid
@@ -18,6 +18,7 @@ class SectionAssets(Base):
     storage_path = Column(String, nullable=False)  # Path to cropped image file
     caption = Column(Text, nullable=True)  # AI-generated caption
     timestamp = Column(Float, nullable=False)  # Exact second in the video
+    slide_page = Column(Integer, nullable=True)  # Page number if extracted from a slide PDF
     crop_info = Column(JSONB, nullable=True)  # Crop coordinates: {xmin, ymin, xmax, ymax}
 
     # Relationship to Sections (many-to-one)

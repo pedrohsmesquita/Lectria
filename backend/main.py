@@ -3,6 +3,8 @@ FastAPI Backend - Sistema de Transformação de Vídeo em Livro Didático
 """
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import os
 
@@ -12,6 +14,8 @@ from routes.video_routes import router as video_router
 from routes.book_routes import router as book_router
 from routes.chapter_routes import router as chapter_router
 from routes.processing_routes import router as processing_router
+from routes.transcript_routes import router as transcript_router
+from routes.section_routes import router as section_router
 
 app = FastAPI(
     title="Video to Book API",
@@ -28,12 +32,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    import logging
+    logger = logging.getLogger("uvicorn.error")
+    # Clean up errors to make them JSON serializable
+    clean_errors = []
+    for error in exc.errors():
+        error_copy = error.copy()
+        if "input" in error_copy:
+            # Convert UploadFile or other objects to string for logging/JSON
+            error_copy["input"] = str(error_copy["input"])
+        clean_errors.append(error_copy)
+    
+    logger.error(f"Validation Error: {clean_errors}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": clean_errors},
+    )
+
 # Include routers
 app.include_router(auth_router)
 app.include_router(video_router)
 app.include_router(book_router)
 app.include_router(chapter_router)
 app.include_router(processing_router)
+app.include_router(transcript_router)
+app.include_router(section_router)
 
 @app.get("/")
 async def root():

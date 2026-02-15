@@ -19,6 +19,8 @@ from models import (
     Chapters,
     Sections,
     SectionAssets,
+    Transcription,
+    Slide,
 )
 
 # this is the Alembic Config object, which provides

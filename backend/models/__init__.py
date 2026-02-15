@@ -8,6 +8,8 @@ from .videos import Videos
 from .chapters import Chapters
 from .sections import Sections
 from .section_assets import SectionAssets
+from .transcriptions import Transcription
+from .slides import Slide
 
 __all__ = [
     "UserAuth",
@@ -17,4 +19,6 @@ __all__ = [
     "Chapters",
     "Sections",
     "SectionAssets",
+    "Transcription",
+    "Slide",
 ]

@@ -127,10 +127,14 @@ async def create_book(
     db.commit()
     db.refresh(new_book)
     
-    # Create book folder in media_storage/{user_id}/{book_id}
+    # Create book folder in media_storage/{user_id}/{book_id}/uploads
     media_storage_path = os.getenv("MEDIA_STORAGE_PATH", "/app/media")
+    # Base book folder
     book_folder = os.path.join(media_storage_path, str(user_id), str(new_book.id))
-    os.makedirs(book_folder, exist_ok=True)
+    # Uploads subfolder
+    uploads_folder = os.path.join(book_folder, "uploads")
+    
+    os.makedirs(uploads_folder, exist_ok=True)
     
     return BookResponse(
         id=new_book.id,

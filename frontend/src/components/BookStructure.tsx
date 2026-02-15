@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { BookOpen, ChevronRight, Loader2, Save, X, ArrowLeft, FileText, Video, Clock } from 'lucide-react';
+import { BookOpen, ChevronRight, Loader2, Save, X, ArrowLeft, FileText, Video, Clock, Play } from 'lucide-react';
 
 // ============================================
 // Types
@@ -47,6 +47,24 @@ const BookStructure: React.FC = () => {
     const [editTitle, setEditTitle] = useState('');
     const [editContent, setEditContent] = useState('');
     const [saving, setSaving] = useState(false);
+    const [generating, setGenerating] = useState(false);
+    const [generatingSectionId, setGeneratingSectionId] = useState<string | null>(null);
+    const [bookStatus, setBookStatus] = useState<string>('');
+
+    const fetchBookDetails = useCallback(async () => {
+        try {
+            const token = localStorage.getItem('access_token');
+            const response = await fetch(`http://localhost:8000/books/${bookId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setBookStatus(data.status);
+            }
+        } catch (error) {
+            console.error('Error fetching book details:', error);
+        }
+    }, [bookId]);
 
     // Fetch chapters and sections
     const fetchChapters = useCallback(async () => {
@@ -72,13 +90,18 @@ const BookStructure: React.FC = () => {
             if (response.ok) {
                 const data = await response.json();
                 setChapters(data);
+
+                // If chapters exist, get book status from the first one's parent or fetch book
+                if (data.length > 0) {
+                    fetchBookDetails();
+                }
             }
         } catch (error) {
             console.error('Error fetching chapters:', error);
         } finally {
             setLoading(false);
         }
-    }, [bookId, navigate]);
+    }, [bookId, navigate, fetchBookDetails]);
 
     useEffect(() => {
         fetchChapters();
@@ -170,13 +193,95 @@ const BookStructure: React.FC = () => {
     const getStatusColor = (status: string): string => {
         switch (status) {
             case 'SUCCESS':
+            case 'SUCESSO':
+            case 'CONCLUIDO':
+            case 'COMPLETED':
                 return 'bg-green-500/20 text-green-400 border-green-500/30';
             case 'PROCESSING':
+            case 'PROCESSANDO':
                 return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
             case 'ERROR':
+            case 'ERRO':
                 return 'bg-red-500/20 text-red-400 border-red-500/30';
+            case 'ESTRUTURA_GERADA':
+            case 'DISCOVERY_COMPLETE':
+                return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
             default:
                 return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+        }
+    };
+
+    // Handle Generate Content
+    const handleGenerateContent = async () => {
+        // Check if any section has a video_id (manual trigger check)
+        const hasVideo = chapters.some(ch => ch.sections.some(sec => sec.video_id));
+        if (hasVideo) {
+            alert("Processamento de conteúdo via vídeo ainda não implementado. Por favor, use transcrições.");
+            return;
+        }
+
+        setGenerating(true);
+        try {
+            const token = localStorage.getItem('access_token');
+            const response = await fetch(`http://localhost:8000/books/${bookId}/generate-content`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                fetchChapters(); // Refresh to show processing status
+                setBookStatus('PROCESSANDO');
+            } else {
+                const error = await response.json();
+                alert(`Erro: ${error.detail || 'Falha ao iniciar geração'}`);
+            }
+        } catch (error) {
+            console.error('Error triggering generation:', error);
+            alert('Erro de conexão ao iniciar geração.');
+        } finally {
+            setGenerating(false);
+        }
+    };
+
+    // Handle Generate Individual Section Content
+    const handleGenerateSectionContent = async (sectionId: string) => {
+        setGeneratingSectionId(sectionId);
+        try {
+            const token = localStorage.getItem('access_token');
+            const response = await fetch(`http://localhost:8000/sections/${sectionId}/generate-content`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                // Instantly update local state to processing
+                setChapters(prev => prev.map(ch => ({
+                    ...ch,
+                    sections: ch.sections.map(sec =>
+                        sec.id === sectionId ? { ...sec, status: 'PROCESSANDO' } : sec
+                    )
+                })));
+
+                // If the selected item is this section, update it too
+                if (selectedItem?.type === 'section' && selectedItem.data.id === sectionId) {
+                    setSelectedItem({
+                        type: 'section',
+                        data: { ...selectedItem.data, status: 'PROCESSANDO' }
+                    });
+                }
+            } else {
+                const error = await response.json();
+                alert(`Erro: ${error.detail || 'Falha ao iniciar geração da seção'}`);
+            }
+        } catch (error) {
+            console.error('Error triggering section generation:', error);
+            alert('Erro de conexão ao iniciar geração da seção.');
+        } finally {
+            setGeneratingSectionId(null);
         }
     };
 
@@ -204,6 +309,29 @@ const BookStructure: React.FC = () => {
                             <p className="text-slate-400">Capítulos e Seções</p>
                         </div>
                     </div>
+
+                    {/* Generate Content Button */}
+                    {(bookStatus === 'ESTRUTURA_GERADA' || bookStatus === 'DISCOVERY_COMPLETE') && (
+                        <button
+                            onClick={handleGenerateContent}
+                            disabled={generating}
+                            className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl transition-all shadow-lg shadow-green-500/20 flex items-center gap-2 font-semibold"
+                        >
+                            {generating ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                                <BookOpen className="w-5 h-5" />
+                            )}
+                            Gerar Conteúdo Completo
+                        </button>
+                    )}
+
+                    {bookStatus === 'PROCESSANDO' && (
+                        <div className="flex items-center gap-2 px-6 py-3 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-xl">
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span className="font-semibold">Gerando Conteúdo...</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Loading State */}
@@ -266,9 +394,29 @@ const BookStructure: React.FC = () => {
                                                         <span className="text-sm text-slate-300">
                                                             {chapter.order}.{section.order} {section.title}
                                                         </span>
-                                                        <span className={`px-2 py-1 rounded text-xs border ${getStatusColor(section.status)}`}>
-                                                            {section.status}
-                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`px-2 py-1 rounded text-xs border ${getStatusColor(section.status)}`}>
+                                                                {section.status}
+                                                            </span>
+                                                            {(section.status === 'PENDENTE' || section.status === 'ERRO') && (
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleGenerateSectionContent(section.id);
+                                                                    }}
+                                                                    disabled={generatingSectionId === section.id || generating}
+                                                                    className="p-1 bg-green-600/20 hover:bg-green-600/40 border border-green-500/30 text-green-400 rounded transition-all flex items-center gap-1 text-[10px] font-bold"
+                                                                    title="Gerar apenas esta seção"
+                                                                >
+                                                                    {generatingSectionId === section.id ? (
+                                                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                                                    ) : (
+                                                                        <Play className="w-3 h-3" />
+                                                                    )}
+                                                                    GERAR
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}
