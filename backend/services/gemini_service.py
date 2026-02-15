@@ -29,6 +29,7 @@ OBJETIVOS:
 
 DIRETRIZES:
 - Granularidade: Seções de 3 a 10 minutos de leitura.
+- Limite de Extensão: Gere no máximo entre 8 a 12 seções para todo o livro.
 - Nomenclatura profissional e acadêmica.
 
 **ESPECIFICAÇÃO DA SAÍDA (JSON STRICT):**
@@ -164,7 +165,7 @@ async def generate_section_content(
     logger.info(f"Calling Gemini Pro for Section Content: {section_title}...")
     
     generation_config = genai.GenerationConfig(
-        temperature=0.7,
+        temperature=0.3,  # Lower temperature for more stable JSON
         response_mime_type="application/json"
     )
     
@@ -192,16 +193,34 @@ def _parse_json_response(text: str) -> Dict[str, Any]:
     
     cleaned = cleaned.strip()
     
+    # Pre-processing: Try to fix common JSON issues in AI output
+    # 1. Handle unescaped backslashes (but not the ones for escaping quotes)
+    # 2. Handle potential multi-line strings if any (JSON doesn't allow raw newlines in strings)
+    
     try:
         return json.loads(cleaned)
-    except json.JSONDecodeError:
-        # Fallback: Try to find JSON object using regex
+    except json.JSONDecodeError as initial_err:
+        logger.warning(f"Initial JSON parse failed: {initial_err}. Attempting aggressive recovery.")
+        
+        # Recovery strategy 1: Find everything between the first { and the last }
         match = re.search(r'(\{.*\})', cleaned, re.DOTALL)
         if match:
+            potential_json = match.group(1)
             try:
-                return json.loads(match.group(1))
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed fallback JSON parsing: {e}")
+                return json.loads(potential_json)
+            except json.JSONDecodeError:
+                # Recovery strategy 2: Try to fix unescaped newlines in markdown strings
+                # This regex looks for strings that might contain brand newlines
+                fixed = re.sub(r'":\s*"(.*?)"\s*([,}])', 
+                               lambda m: '": "' + m.group(1).replace('\n', '\\n').replace('\r', '\\r') + '"' + m.group(2), 
+                               potential_json, flags=re.DOTALL)
+                try:
+                    return json.loads(fixed)
+                except json.JSONDecodeError as final_err:
+                    logger.error(f"Aggressive recovery failed. Error: {final_err}")
+                    logger.error(f"Problematic JSON string: {potential_json[:1000]}...")
         
-        logger.error(f"JSON Parse Error. Raw Response Head: {text[:500]}")
-        raise HTTPException(status_code=500, detail="Invalid JSON from AI")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Invalid JSON from AI: {str(initial_err)}"
+        )

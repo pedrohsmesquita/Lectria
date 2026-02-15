@@ -13,6 +13,7 @@ from services.gemini_service import generate_book_discovery, generate_section_co
 import os
 from uuid import UUID
 import logging
+from google.api_core import exceptions as google_exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -218,14 +219,17 @@ def process_section_content_task(self, section_id: str, trigger_next: bool = Tru
 
         return {"status": "Section complete", "section_id": section_id}
 
+    except google_exceptions.ResourceExhausted as e:
+        logger.warning(f"Quota exceeded for section {section_id}. Retrying with backoff...")
+        # Use a longer delay for quota issues to avoid constant polling
+        raise self.retry(exc=e, countdown=60)  # Wait at least 1 minute on quota error
+
     except Exception as e:
         logger.exception(f"Error in section task {section_id}")
         section = db.query(Sections).filter(Sections.id == UUID(section_id)).first()
         if section:
             section.status = "ERRO"
             db.commit()
-            # Still trigger orchestrator to try next one or fail gracefully? 
-            # Usually we stop on error for sequential chain.
             book = section.chapter.book
             book.status = "ERRO"
             db.commit()
