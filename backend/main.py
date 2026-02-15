@@ -16,6 +16,7 @@ from routes.chapter_routes import router as chapter_router
 from routes.processing_routes import router as processing_router
 from routes.transcript_routes import router as transcript_router
 from routes.section_routes import router as section_router
+from routes.books_export_routes import router as books_export_router
 
 app = FastAPI(
     title="Video to Book API",
@@ -59,6 +60,7 @@ app.include_router(chapter_router)
 app.include_router(processing_router)
 app.include_router(transcript_router)
 app.include_router(section_router)
+app.include_router(books_export_router)
 
 @app.get("/")
 async def root():
