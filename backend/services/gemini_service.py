@@ -171,25 +171,47 @@ async def generate_book_discovery(
     prompt_parts.append("\n=== ARQUIVOS COM SEUS IDs ===\n\n")
     
     # Upload transcriptions com ID ANTES do arquivo
+    import shutil
+    import tempfile
+    
+    temp_dir = tempfile.gettempdir()
+    
     for idx, t in enumerate(transcriptions, 1):
-        logger.info(f"Uploading transcription {idx} for discovery: {t['path']}")
-        file_obj = genai.upload_file(path=t['path'], display_name=f"Transcript_{idx}")
+        # Use a temporary simple name to avoid issues with long/special filenames in Gemini API
+        temp_path = os.path.join(temp_dir, f"transcription_{idx}_{t['id']}.pdf")
+        shutil.copy2(t['path'], temp_path)
         
-        # ID ANTES do arquivo (CRÍTICO!)
-        prompt_parts.append(f"TRANSCRIÇÃO ID: {t['id']}\n")
-        prompt_parts.append(file_obj)
-        prompt_parts.append("\n")
+        try:
+            logger.info(f"Uploading transcription {idx} for discovery: {temp_path}")
+            file_obj = genai.upload_file(path=temp_path, display_name=f"Transcript_{idx}")
+            
+            # ID ANTES do arquivo (CRÍTICO!)
+            prompt_parts.append(f"TRANSCRIÇÃO ID: {t['id']}\n")
+            prompt_parts.append(file_obj)
+            prompt_parts.append("\n")
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
     
     # Upload slides com ID ANTES do arquivo
     if slides:
         for idx, s in enumerate(slides, 1):
-            logger.info(f"Uploading slide {idx} for discovery: {s['path']}")
-            file_obj = genai.upload_file(path=s['path'], display_name=f"Slide_{idx}")
+            temp_path = os.path.join(temp_dir, f"slide_{idx}_{s['id']}.pdf")
+            shutil.copy2(s['path'], temp_path)
             
-            # ID ANTES do arquivo (CRÍTICO!)
-            prompt_parts.append(f"SLIDE ID: {s['id']}\n")
-            prompt_parts.append(file_obj)
-            prompt_parts.append("\n")
+            try:
+                logger.info(f"Uploading slide {idx} for discovery: {temp_path}")
+                file_obj = genai.upload_file(path=temp_path, display_name=f"Slide_{idx}")
+                
+                # ID ANTES do arquivo (CRÍTICO!)
+                prompt_parts.append(f"SLIDE ID: {s['id']}\n")
+                prompt_parts.append(file_obj)
+                prompt_parts.append("\n")
+            finally:
+                # Clean up temp file
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
     
     # Instrução final
     prompt_parts.append("""
