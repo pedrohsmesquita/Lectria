@@ -41,6 +41,7 @@ def extract_image_from_slide(
     user_id: UUID,
     book_id: UUID,
     placeholder: str,
+    section_number: str = None,
 ) -> str:
     """
     Extrai uma região específica de uma página PDF como imagem.
@@ -52,6 +53,7 @@ def extract_image_from_slide(
         user_id: ID do usuário (para estrutura de diretórios)
         book_id: ID do livro (para estrutura de diretórios)
         placeholder: nome do placeholder (ex: "[IMAGE_1]") para nomear o arquivo
+        section_number: numeração da seção (ex: "1.1") para criar subpastas
     
     Returns:
         caminho absoluto para a imagem extraída
@@ -107,11 +109,15 @@ def extract_image_from_slide(
         pix = page.get_pixmap(matrix=mat, clip=crop_rect)
         
         # Criar diretório de destino se não existir
-        # Estrutura: /app/media/{user_id}/{book_id}/extracted_images/
+        # Estrutura: /app/media/{user_id}/{book_id}/extracted_images/{section_number}/
         media_root = os.getenv("MEDIA_STORAGE_PATH", "/app/media")
         output_dir = os.path.join(
             media_root, str(user_id), str(book_id), "extracted_images"
         )
+        
+        if section_number:
+            output_dir = os.path.join(output_dir, section_number)
+            
         os.makedirs(output_dir, exist_ok=True)
         
         # Gerar nome do arquivo baseado no placeholder

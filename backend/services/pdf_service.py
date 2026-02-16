@@ -345,6 +345,7 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
                                                 slide_pdf_path = os.path.join(media_root, slide_pdf_path)
                                             
                                             # Extrair a imagem usando o serviço
+                                            section_number = f"{chapter.order}.{section.order}"
                                             img_path = extract_image_from_slide(
                                                 pdf_path=slide_pdf_path,
                                                 page_number=asset.slide_page,
@@ -352,6 +353,7 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
                                                 user_id=book.author_profile_id,
                                                 book_id=book.id,
                                                 placeholder=ph,
+                                                section_number=section_number,
                                             )
                                         except Exception as e:
                                             logger.error(f"Erro ao extrair imagem do slide para {ph}: {e}")
