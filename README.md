@@ -1,6 +1,6 @@
-# 📚 Lectria - Transformando Vídeos em Livros
+# 📚 Lectria - Transformando Aulas em Livros
 
-Este projeto automatiza a criação de livros didáticos a partir de videoaulas utilizando o poder multimodal do **Google Gemini**. O sistema processa vídeos, gera sumários inteligentes, redige capítulos em Markdown e extrai imagens relevantes de slides automaticamente.
+Este projeto automatiza a criação de livros didáticos a partir da transcrição de aulas utilizando o poder multimodal do **Google Gemini**. O sistema processa transcrições, gera sumários inteligentes, redige capítulos em Markdown e extrai imagens relevantes de slides automaticamente.
 
 ## 🛠️ Tecnologias Principais
 
