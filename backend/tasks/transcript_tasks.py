@@ -70,16 +70,28 @@ def process_book_transcripts_task(self, book_id: str):
                 final_trans_id = None
                 if s_trans_id and s_trans_id in valid_transcription_ids:
                     final_trans_id = UUID(s_trans_id)
+                    logger.info(f"  Valid transcription ID: {s_trans_id}")
                 else:
-                    logger.warning(f"Invalid source_transcription_id '{s_trans_id}' from AI. Fallback to first available.")
+                    logger.error(
+                        f"   INVALID transcription ID from Gemini: '{s_trans_id}'\n"
+                        f"   Section: {section_data.get('title')}\n"
+                        f"   Valid IDs: {list(valid_transcription_ids)}\n"
+                        f"   Falling back to first available."
+                    )
                     if transcripts_info:
                         final_trans_id = UUID(transcripts_info[0]["id"])
                 
                 final_slide_id = None
                 if s_slide_id and s_slide_id in valid_slide_ids:
                     final_slide_id = UUID(s_slide_id)
+                    logger.info(f"  Valid slide ID: {s_slide_id}")
                 elif s_slide_id:
-                    logger.warning(f"Invalid source_slide_id '{s_slide_id}' from AI. Setting to None.")
+                    logger.error(
+                        f"   INVALID slide ID from Gemini: '{s_slide_id}'\n"
+                        f"   Section: {section_data.get('title')}\n"
+                        f"   Valid IDs: {list(valid_slide_ids)}\n"
+                        f"   Setting to None."
+                    )
                 
                 section = Sections(
                     chapter_id=chapter.id,
@@ -165,8 +177,10 @@ def process_section_content_task(self, section_id: str, trigger_next: bool = Tru
     """
     Individual Section Task:
     1. Calls Gemini Pro for the specific section content.
-    2. Saves Markdown, assets, and bibliography.
-    3. Re-triggers sequential orchestrator.
+    2. Processes bibliography with global numbering system.
+    3. Replaces [REF:...] markers with [N] in markdown.
+    4. Saves Markdown, assets, and references.
+    5. Re-triggers sequential orchestrator.
     """
     db = next(get_db())
     try:
@@ -186,6 +200,9 @@ def process_section_content_task(self, section_id: str, trigger_next: bool = Tru
 
         # Phase 2: Deep Analysis
         import asyncio
+        from models.global_references import GlobalReferences
+        from sqlalchemy import func
+        
         content_result = asyncio.run(generate_section_content(
             section_title=section.title,
             chapter_title=chapter.title,
@@ -193,18 +210,66 @@ def process_section_content_task(self, section_id: str, trigger_next: bool = Tru
             slide_path=slide.storage_path if slide else None
         ))
 
-        # Update Section
-        section.content_markdown = content_result["content_markdown"]
-        section.bibliography = content_result.get("bibliography_found", [])
+        # ========== PROCESS BIBLIOGRAPHY WITH GLOBAL NUMBERING ==========
+        reference_mapping = {}  # {key: number} for replacement
+        
+        for bib_entry in content_result.get("bibliography_found", []):
+            ref_key = bib_entry["key"]  # Ex: "REF:SILVA_2022"
+            ref_text = bib_entry["full_reference"]  # ABNT formatted text
+            
+            # Check if reference already exists in this book
+            existing_ref = db.query(GlobalReferences).filter(
+                GlobalReferences.book_id == book.id,
+                GlobalReferences.reference_key == ref_key
+            ).first()
+            
+            if existing_ref:
+                # Reuse existing number
+                reference_mapping[ref_key] = existing_ref.reference_number
+                ref_obj = existing_ref
+                logger.info(f"Reusing reference {ref_key} with number {existing_ref.reference_number}")
+            else:
+                # Create new reference with next sequential number
+                max_number = db.query(func.max(GlobalReferences.reference_number)).filter(
+                    GlobalReferences.book_id == book.id
+                ).scalar() or 0
+                
+                new_ref = GlobalReferences(
+                    book_id=book.id,
+                    reference_key=ref_key,
+                    reference_number=max_number + 1,
+                    full_reference_abnt=ref_text
+                )
+                db.add(new_ref)
+                db.flush()  # Get the ID
+                
+                reference_mapping[ref_key] = new_ref.reference_number
+                ref_obj = new_ref
+                logger.info(f"Created new reference {ref_key} with number {new_ref.reference_number}")
+            
+            # Associate reference with this section (many-to-many)
+            if ref_obj not in section.references:
+                section.references.append(ref_obj)
+        
+        # ========== REPLACE [REF:...] MARKERS WITH [N] ==========
+        markdown_content = content_result["content_markdown"]
+        
+        for ref_key, ref_number in reference_mapping.items():
+            # Replace [REF:SILVA_2022] with [1]
+            markdown_content = markdown_content.replace(f"[{ref_key}]", f"[{ref_number}]")
+            logger.info(f"Replaced [{ref_key}] with [{ref_number}] in markdown")
+        
+        section.content_markdown = markdown_content
         section.status = "SUCESSO"
         
-        # Save Assets
+        # ========== SAVE ASSETS (SLIDES) ==========
         for asset_data in content_result.get("section_assets", []):
             asset = SectionAssets(
                 section_id=section.id,
                 placeholder=asset_data["placeholder"],
                 caption=asset_data["caption"],
-                timestamp=0.0,
+                source_type='SLIDE',
+                timestamp=None,  # Not used for slides
                 slide_page=asset_data.get("slide_page"),
                 storage_path=slide.storage_path if slide else "N/A",
                 crop_info=asset_data["crop_info"]
@@ -212,6 +277,7 @@ def process_section_content_task(self, section_id: str, trigger_next: bool = Tru
             db.add(asset)
 
         db.commit()
+        logger.info(f"Section {section_id} processed successfully with {len(reference_mapping)} references")
         
         # Trigger next section if requested
         if trigger_next:

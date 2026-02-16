@@ -10,6 +10,7 @@ from .sections import Sections
 from .section_assets import SectionAssets
 from .transcriptions import Transcription
 from .slides import Slide
+from .global_references import GlobalReferences
 
 __all__ = [
     "UserAuth",
@@ -21,4 +22,5 @@ __all__ = [
     "SectionAssets",
     "Transcription",
     "Slide",
+    "GlobalReferences",
 ]
