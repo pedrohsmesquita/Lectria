@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { BookOpen, ChevronRight, Loader2, Save, X, ArrowLeft, FileText, Video, Clock, Play } from 'lucide-react';
+import { BookOpen, ChevronRight, Loader2, Save, X, ArrowLeft, FileText, Play, Download } from 'lucide-react';
 
 // ============================================
 // Types
@@ -106,6 +106,28 @@ const BookStructure: React.FC = () => {
     useEffect(() => {
         fetchChapters();
     }, [fetchChapters]);
+
+    // Adaptive polling during content generation
+    useEffect(() => {
+        // Check if any section is processing
+        const hasProcessingSections = chapters.some(ch =>
+            ch.sections.some(sec => sec.status === 'PROCESSANDO')
+        );
+
+        // Check if book is generating content
+        const isGeneratingContent = bookStatus === 'PROCESSANDO';
+
+        if (hasProcessingSections || isGeneratingContent) {
+            // Poll every 2 seconds during active generation
+            const intervalId = setInterval(() => {
+                fetchChapters();
+                fetchBookDetails();
+            }, 2000);
+
+            return () => clearInterval(intervalId);
+        }
+    }, [chapters, bookStatus, fetchChapters, fetchBookDetails]);
+
 
     // Handle item selection
     const handleSelectChapter = (chapter: Chapter) => {
@@ -245,6 +267,54 @@ const BookStructure: React.FC = () => {
         }
     };
 
+    // Handle Download PDF
+    const handleDownloadPDF = async () => {
+        try {
+            const token = localStorage.getItem('access_token');
+            const response = await fetch(`http://localhost:8000/books/${bookId}/export/pdf`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                // Get the filename from Content-Disposition header
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = 'ebook.pdf';
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+
+                // Create blob and download
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } else {
+                const error = await response.json();
+                alert(`Erro ao baixar PDF: ${error.detail || 'Erro desconhecido'}`);
+            }
+        } catch (error) {
+            console.error('Error downloading PDF:', error);
+            alert('Erro ao baixar PDF. Tente novamente.');
+        }
+    };
+
+    // Check if all sections are generated
+    const allSectionsGenerated = chapters.length > 0 && chapters.every(ch =>
+        ch.sections.every(sec => sec.status === 'SUCESSO')
+    );
+
+
     // Handle Generate Individual Section Content
     const handleGenerateSectionContent = async (sectionId: string) => {
         setGeneratingSectionId(sectionId);
@@ -323,6 +393,17 @@ const BookStructure: React.FC = () => {
                                 <BookOpen className="w-5 h-5" />
                             )}
                             Gerar Conteúdo Completo
+                        </button>
+                    )}
+
+                    {/* Download PDF Button - Only show when all sections are generated */}
+                    {allSectionsGenerated && (
+                        <button
+                            onClick={handleDownloadPDF}
+                            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2 font-semibold"
+                        >
+                            <Download className="w-5 h-5" />
+                            Baixar PDF
                         </button>
                     )}
 
@@ -418,6 +499,29 @@ const BookStructure: React.FC = () => {
                                                             )}
                                                         </div>
                                                     </div>
+
+                                                    {/* Progress Bar */}
+                                                    <div className="mt-2">
+                                                        <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+                                                            <div
+                                                                className={`h-full transition-all duration-500 ${section.status === 'PROCESSANDO'
+                                                                    ? 'bg-gradient-to-r from-blue-500 to-indigo-500 animate-pulse'
+                                                                    : section.status === 'SUCESSO'
+                                                                        ? 'bg-gradient-to-r from-green-500 to-emerald-500'
+                                                                        : section.status === 'ERRO'
+                                                                            ? 'bg-gradient-to-r from-red-500 to-rose-500'
+                                                                            : 'bg-slate-600'
+                                                                    }`}
+                                                                style={{
+                                                                    width: section.status === 'PROCESSANDO'
+                                                                        ? '50%'
+                                                                        : section.status === 'SUCESSO' || section.status === 'ERRO'
+                                                                            ? '100%'
+                                                                            : '0%'
+                                                                }}
+                                                            ></div>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
@@ -457,23 +561,6 @@ const BookStructure: React.FC = () => {
                                 {/* Section-specific fields */}
                                 {selectedItem.type === 'section' && (
                                     <>
-                                        {/* Video Info */}
-                                        <div className="mb-4 p-3 bg-white/5 rounded-lg">
-                                            <div className="flex items-center gap-2 text-sm text-slate-300 mb-2">
-                                                <Video className="w-4 h-4" />
-                                                <span className="font-medium">Vídeo:</span>
-                                            </div>
-                                            <p className="text-sm text-slate-400 mb-2">
-                                                {selectedItem.data.video_filename || 'N/A'}
-                                            </p>
-                                            <div className="flex items-center gap-2 text-sm text-slate-400">
-                                                <Clock className="w-4 h-4" />
-                                                <span>
-                                                    {formatTime(selectedItem.data.start_time)} - {formatTime(selectedItem.data.end_time)}
-                                                </span>
-                                            </div>
-                                        </div>
-
                                         {/* Status */}
                                         <div className="mb-4">
                                             <label className="block text-sm font-medium text-slate-300 mb-2">

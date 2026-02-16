@@ -31,7 +31,7 @@ def process_book_transcripts_task(self, book_id: str):
             raise Exception(f"Book {book_id} not found")
 
         book.status = "PROCESSANDO"
-        book.current_step = "Analisando documentos..."
+        book.current_step = "Preparando documentos..."
         book.processing_progress = 10
         db.commit()
 
@@ -42,8 +42,19 @@ def process_book_transcripts_task(self, book_id: str):
         transcripts_info = [{"id": str(t.id), "path": t.storage_path} for t in transcriptions_db]
         slides_info = [{"id": str(s.id), "path": s.storage_path} for s in slides_db]
 
+        # Update: Sending to AI
+        book.current_step = "Enviando para análise de IA..."
+        book.processing_progress = 30
+        db.commit()
+
         # Phase 1: Discovery
         import asyncio
+        
+        # Update: Generating structure
+        book.current_step = "Gerando estrutura do livro..."
+        book.processing_progress = 50
+        db.commit()
+        
         discovery_result = asyncio.run(
             generate_book_discovery(transcripts_info, slides_info)
         )
@@ -51,6 +62,11 @@ def process_book_transcripts_task(self, book_id: str):
         # Prepare valid ID sets for validation
         valid_transcription_ids = {t["id"] for t in transcripts_info}
         valid_slide_ids = {s["id"] for s in slides_info}
+
+        # Update: Finalizing summary
+        book.current_step = "Finalizando sumário..."
+        book.processing_progress = 80
+        db.commit()
 
         # Save Skeleton
         for chapter_data in discovery_result["chapters"]:

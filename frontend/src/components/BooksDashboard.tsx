@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BookOpen, Plus, Upload, Video, Loader2, Trash2, FileText } from 'lucide-react';
+import { BookOpen, Plus, Loader2, Trash2, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CreateBookModal from './CreateBookModal';
 import { translateStatus } from '../utils/statusTranslations';
@@ -63,12 +63,31 @@ const BooksDashboard: React.FC = () => {
     useEffect(() => {
         fetchBooks();
 
-        // Poll for updates every 5 seconds
-        const intervalId = setInterval(fetchBooks, 5000);
+        // Determine polling interval based on current book states
+        const hasActiveProcessing = books.some(book =>
+            ['PROCESSANDO', 'ANALISANDO_CONTEUDO', 'GERANDO_SUMARIO', 'GERANDO_CONTEUDO'].includes(book.status)
+        );
 
-        // Cleanup interval on unmount
+        const hasStructureReady = books.some(book =>
+            ['ESTRUTURA_GERADA', 'DISCOVERY_COMPLETE'].includes(book.status)
+        );
+
+        let pollingInterval = 10000; // Default: 10 seconds for stable states
+
+        if (hasActiveProcessing) {
+            pollingInterval = 2000; // 2 seconds during active processing
+        } else if (hasStructureReady) {
+            pollingInterval = 5000; // 5 seconds when structure is ready
+        }
+
+        // Set up interval with current polling rate
+        const intervalId = setInterval(fetchBooks, pollingInterval);
+
+        // Cleanup interval on unmount or when dependencies change
         return () => clearInterval(intervalId);
-    }, [fetchBooks]);
+    }, [fetchBooks, books]); // Re-run when books change to adjust polling rate
+
+
 
     // Handle logout
     const handleLogout = () => {
@@ -173,7 +192,7 @@ const BooksDashboard: React.FC = () => {
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-3xl font-bold text-white mb-2">Meus Livros</h1>
-                        <p className="text-slate-400">Gerencie seus livros e vídeos educacionais</p>
+                        <p className="text-slate-400">Gerencie seus livros e transcrições educacionais</p>
                     </div>
                     <button
                         onClick={handleLogout}
@@ -206,7 +225,7 @@ const BooksDashboard: React.FC = () => {
                     <div className="bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 p-12 text-center">
                         <BookOpen className="w-20 h-20 text-slate-600 mx-auto mb-4" />
                         <h3 className="text-xl font-semibold text-white mb-2">Nenhum livro criado ainda</h3>
-                        <p className="text-slate-400 mb-6">Crie seu primeiro livro para começar a adicionar vídeos</p>
+                        <p className="text-slate-400 mb-6">Crie seu primeiro livro para começar a adicionar transcrições</p>
                         <button
                             onClick={() => setShowCreateModal(true)}
                             className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all inline-flex items-center gap-2"
@@ -259,10 +278,13 @@ const BooksDashboard: React.FC = () => {
 
                                     {/* Status Badge */}
                                     <div className="mb-4">
-                                        {book.video_count > 0 ? (
+                                        {book.video_count > 0 || ['PROCESSANDO', 'ANALISANDO_CONTEUDO', 'GERANDO_SUMARIO', 'GERANDO_CONTEUDO', 'ESTRUTURA_GERADA', 'CONCLUIDO', 'ERRO'].includes(book.status) ? (
                                             <>
                                                 <div className="flex items-center gap-2 mb-2">
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(book.status)}`}>
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(book.status)} ${['PROCESSANDO', 'ANALISANDO_CONTEUDO', 'GERANDO_SUMARIO', 'GERANDO_CONTEUDO'].includes(book.status)
+                                                        ? 'animate-pulse'
+                                                        : ''
+                                                        }`}>
                                                         {book.status_display || translateStatus(book.status)}
                                                     </span>
                                                 </div>
@@ -291,42 +313,24 @@ const BooksDashboard: React.FC = () => {
                                         )}
                                     </div>
 
-                                    {/* Video Count */}
-                                    <div className="flex items-center gap-2 text-slate-300 mb-4">
-                                        <Video className="w-4 h-4" />
-                                        <span className="text-sm">
-                                            {book.video_count} {book.video_count === 1 ? 'vídeo' : 'vídeos'}
-                                        </span>
-                                    </div>
+
 
                                     {/* Date */}
                                     <p className="text-xs text-slate-500 mb-4">
                                         Criado em {formatDate(book.created_at)}
                                     </p>
 
-                                    {/* Action Buttons */}
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                navigate(`/upload/${book.id}`);
-                                            }}
-                                            className="flex-1 py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2"
-                                        >
-                                            <Upload className="w-4 h-4" />
-                                            Enviar vídeo
-                                        </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                navigate(`/upload-transcript/${book.id}`);
-                                            }}
-                                            className="flex-1 py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2"
-                                        >
-                                            <FileText className="w-4 h-4" />
-                                            Enviar transcrição
-                                        </button>
-                                    </div>
+                                    {/* Action Button */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate(`/upload-transcript/${book.id}`);
+                                        }}
+                                        className="w-full py-3 bg-white/5 hover:bg-purple-600 border border-white/10 hover:border-purple-500 text-white rounded-lg transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <FileText className="w-4 h-4" />
+                                        Enviar transcrição
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -357,7 +361,7 @@ const BooksDashboard: React.FC = () => {
                             Tem certeza que deseja excluir o livro <strong className="text-white">"{deleteConfirmBook.title}"</strong>?
                         </p>
                         <p className="text-slate-400 text-sm mb-6">
-                            Esta ação não pode ser desfeita. Todos os vídeos e dados relacionados serão permanentemente removidos.
+                            Esta ação não pode ser desfeita. Todas as transcrições e dados relacionados serão permanentemente removidos.
                         </p>
 
                         <div className="flex gap-3">
