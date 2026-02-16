@@ -37,5 +37,8 @@ class Books(Base):
     # Relationship to Slides (one-to-many)
     slides = relationship("Slide", back_populates="book", cascade="all, delete-orphan")
 
+    # Relationship to GlobalReferences (one-to-many)
+    global_references = relationship("GlobalReferences", back_populates="book", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<Books(id={self.id}, title={self.title}, status={self.status})>"

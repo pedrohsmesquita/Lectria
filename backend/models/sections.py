@@ -1,12 +1,20 @@
 """
 Sections Model - Chapter sections with video content mapping
 """
-from sqlalchemy import Column, String, Integer, Float, Text, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Column, String, Integer, Float, Text, ForeignKey, Table
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
 
 from database import Base
+
+# Association table for many-to-many relationship between Sections and GlobalReferences
+section_references = Table(
+    'section_references',
+    Base.metadata,
+    Column('section_id', UUID(as_uuid=True), ForeignKey('sections.id', ondelete='CASCADE'), primary_key=True),
+    Column('reference_id', UUID(as_uuid=True), ForeignKey('global_references.id', ondelete='CASCADE'), primary_key=True)
+)
 
 
 class Sections(Base):
@@ -22,7 +30,6 @@ class Sections(Base):
     start_time = Column(Float, nullable=False)  # Timestamp in seconds
     end_time = Column(Float, nullable=False)  # Timestamp in seconds
     content_markdown = Column(Text, nullable=True)  # Generated content from Gemini 3.0 Pro
-    bibliography = Column(JSONB, nullable=True)  # List of references found in this section
     status = Column(String, nullable=False, default="PENDING")  # PENDING, SUCCESS, ERROR
 
     # Relationship to Chapters (many-to-one)
@@ -38,7 +45,14 @@ class Sections(Base):
     slide = relationship("Slide")
 
     # Relationship to SectionAssets (one-to-many)
-    assets = relationship("SectionAssets", back_populates="section", cascade="all, delete-orphan", order_by="SectionAssets.timestamp")
+    assets = relationship("SectionAssets", back_populates="section", cascade="all, delete-orphan", order_by="SectionAssets.slide_page")
+
+    # Relationship to GlobalReferences (many-to-many)
+    references = relationship(
+        "GlobalReferences",
+        secondary=section_references,
+        back_populates="sections"
+    )
 
     def __repr__(self):
         return f"<Sections(id={self.id}, title={self.title}, start_time={self.start_time}, end_time={self.end_time})>"
