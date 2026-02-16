@@ -23,9 +23,29 @@ OBJETIVOS:
 2. Dividir cada capítulo em seções detalhadas (`Sections`).
 3. **Mapeamento Rigoroso de Fontes:** 
    - Para cada seção, você DEVE identificar QUAL transcrição é a fonte principal.
-   - Use APENAS os IDs marcados como <TRANSCRIÇÃO> no campo `source_transcription_id`.
-   - Use APENAS os IDs marcados como <SLIDE> no campo `source_slide_id`.
-   - NUNCA use um ID de slide no campo de transcrição ou vice-versa.
+   - Cada arquivo terá seu ID indicado IMEDIATAMENTE ANTES dele.
+   - Use APENAS os IDs que aparecem antes dos arquivos.
+
+**REGRAS CRÍTICAS DE MAPEAMENTO DE IDs:**
+
+ATENÇÃO MÁXIMA: Cada arquivo que você receber terá uma linha IMEDIATAMENTE ANTES dele indicando seu ID.
+
+Formato que você receberá:
+  "TRANSCRIÇÃO ID: da0f6ef1-5560-46cf-87f8-fe6b29b4d3c0"
+  <arquivo de transcrição>
+  
+  "SLIDE ID: f3a7b2c9-1234-5678-9abc-def012345678"
+  <arquivo de slide>
+
+Você DEVE:
+1. Ler o ID que aparece ANTES de cada arquivo
+2. Usar esse ID EXATO no campo correspondente do JSON
+3. NUNCA inventar, modificar ou gerar novos UUIDs
+4. Copiar o UUID completo, incluindo todos os hífens
+
+Mapeamento de campos:
+- "TRANSCRIÇÃO ID: ..." → use em `source_transcription_id`
+- "SLIDE ID: ..." → use em `source_slide_id` (ou null se não houver)
 
 DIRETRIZES:
 - Granularidade: Seções de 3 a 10 minutos de leitura.
@@ -43,8 +63,8 @@ Sua resposta deve ser EXCLUSIVAMENTE um objeto JSON válido.
         {
           "title": "Título da Seção",
           "order": 1,
-          "source_transcription_id": "ID_DA_TRANSCRICAO_DA_LISTA_TRANSCRIÇÃO",
-          "source_slide_id": "ID_DO_SLIDE_DA_LISTA_SLIDE_OU_NULL"
+          "source_transcription_id": "UUID_EXATO_QUE_APARECEU_ANTES_DA_TRANSCRIÇÃO",
+          "source_slide_id": "UUID_EXATO_QUE_APARECEU_ANTES_DO_SLIDE_OU_NULL"
         }
       ]
     }
@@ -54,30 +74,65 @@ Sua resposta deve ser EXCLUSIVAMENTE um objeto JSON válido.
 
 # System Instructions for Phase 2: Deep Analysis (Content Generation)
 DEEP_ANALYSIS_INSTRUCTION = """
-Você é um Editor Acadêmico de Elite. Sua missão é escrever o conteúdo detalhado de uma SEÇÃO específica de um livro didático, baseando-se na transcrição e nos slides fornecidos.
+Você é um Editor Acadêmico de Elite com capacidades avançadas de visão computacional. Sua missão é escrever o conteúdo detalhado de uma SEÇÃO específica de um livro didático, baseando-se na transcrição e nos slides (PDF) fornecidos.
 
-DIRETRIZES:
-- Escreva um texto fluido, acadêmico e em português formal.
-- Utilize marcadores [IMAGE_N] no texto para indicar onde um slide deve ser inserido.
-- Extraia bibliografia e gere legendas técnicas.
-- Produza o conteúdo completo para esta seção (3.000 a 8.000 caracteres, dependendo da fonte).
+**DIRETRIZES DE CONTEÚDO:**
+
+* Escreva um texto fluido, acadêmico e em português formal.
+* Utilize marcadores [IMAGE_N] no texto para indicar onde um slide deve ser inserido.
+* Extraia bibliografia e gere legendas técnicas.
+* Produza o conteúdo completo para esta seção (3.000 a 8.000 caracteres).
+* **Citações:** Sempre que mencionar uma fonte da bibliografia, utilize o marcador [REF:SOBRENOME_ANO] (ex: [REF:SILVA_2022]).
+* **Consistência:* Certifique-se de que cada [REF:...] no texto tenha uma entrada correspondente no campo bibliography_found.
+
+**DIRETRIZES DE BIBLIOGRAFIA**
+* **FONTE ÚNICA:** Extraia referências bibliográficas EXCLUSIVAMENTE se elas estiverem escritas de forma explícita nos slides (PDF).
+* **PROIBIÇÃO:** Não tente criar referências baseadas apenas em nomes mencionados verbalmente na transcrição. Se a fonte não aparece visualmente no slide, não a inclua na lista bibliography_found.
+* **QUALIDADE:** Se encontrar um link, DOI ou ISBN no slide, inclua-o na referência completa.
+
+**DIRETRIZES DE VISÃO (DETECÇÃO DE SLIDES):**
+
+* **Análise Visual:** Você deve analisar visualmente cada página do PDF para localizar a área exata do conteúdo do slide.
+* **Isolamento de Conteúdo:** Desconsidere margens, cabeçalhos de página, rodapés e, obrigatoriamente, ignore as linhas de anotação (layout de caderno) que o professor possa ter utilizado. O recorte deve focar apenas no retângulo do slide original.
+* **Sistema de Coordenadas:** Use coordenadas normalizadas de 0 a 1000.
+* [0, 0] é o canto superior esquerdo da página.
+* [1000, 1000] é o canto inferior direito da página.
+* **Precisão do Crop:** O `crop_info` não pode ser estático. Ele deve representar a "Bounding Box" real do slide detectado em cada página citada.
+
+**REGRAS DE FORMATAÇÃO JSON:**
+
+* **ESCAPE:** Use barras invertidas para aspas duplas dentro de strings (ex: "caption": "O slide diz \"Células\"...").
+* **CARACTERES ESPECIAIS:** Evite quebras de linha reais dentro dos valores das chaves; use \n para novas linhas no Markdown.
+* **VALIDAÇÃO:** Antes de finalizar, certifique-se de que todos os colchetes [ e chaves { foram fechados corretamente.
+* **PROIBIÇÃO:** Não inclua comentários ou qualquer caractere fora da estrutura JSON.
 
 **ESPECIFICAÇÃO DA SAÍDA (JSON STRICT):**
-Sua resposta deve ser EXCLUSIVAMENTE um objeto JSON válido. 
-NÃO use blocos de código markdown (não use ```json ou ```).
+Sua resposta deve ser EXCLUSIVAMENTE um objeto JSON válido.
+NÃO use blocos de código markdown (não use `json ou `).
 NÃO adicione nenhum texto explicativo antes ou depois do JSON.
 NÃO repita o objeto JSON.
+
 {
-  "content_markdown": "Texto em Markdown com [IMAGE_N]...",
-  "bibliography_found": ["Referência 1", "Referência 2"],
-  "section_assets": [
-    {
-      "placeholder": "[IMAGE_1]",
-      "caption": "Legenda da imagem",
-      "slide_page": 5,
-      "crop_info": { "xmin": 0, "ymin": 0, "xmax": 1000, "ymax": 1000 }
-    }
-  ]
+	"content_markdown": "Texto em Markdown com [IMAGE_N] e [REF:SOBRENOME_ANO]...",
+	"bibliography_found": [
+		{
+		  "key": "REF:SOBRENOME_ANO",
+		  "full_reference": "Referência respeitando a ABNT"
+		}
+	 ],
+	"section_assets": [
+		{
+			"placeholder": "[IMAGE_1]",
+			"caption": "Legenda técnica da imagem",
+			"slide_page": 5,
+			"crop_info": {
+				"ymin": "valor_detectado_0_a_1000",
+				"xmin": "valor_detectado_0_a_1000",
+				"ymax": "valor_detectado_0_a_1000",
+				"xmax": "valor_detectado_0_a_1000"
+			}
+		}
+	]
 }
 """
 
@@ -86,7 +141,7 @@ async def generate_book_discovery(
     slides: List[Dict[str, str]] = None     # List of {"id": uuid, "path": path}
 ) -> Dict[str, Any]:
     """
-    Phase 1: Generates the book skeleton using Gemini 1.5 Flash.
+    Phase 1: Generates the book skeleton using Gemini 2.5 Flash.
     """
     google_api_key = os.getenv("GOOGLE_API_KEY")
     if not google_api_key:
@@ -95,24 +150,54 @@ async def generate_book_discovery(
     genai.configure(api_key=google_api_key)
     model = GenerativeModel(model_name="gemini-2.5-flash", system_instruction=DISCOVERY_INSTRUCTION)
     
-    prompt_parts = ["Analise estes arquivos e gere o sumário do livro conforme as diretrizes.\n"]
+    prompt_parts = ["Analise estes arquivos e gere o sumário do livro.\n\n"]
     
-    # Upload and add Transcriptions
+    # Lista de IDs válidos (para referência)
+    prompt_parts.append("=== LISTA DE IDs VÁLIDOS ===\n")
+    prompt_parts.append("TRANSCRIÇÕES:\n")
     for t in transcriptions:
-        logger.info(f"Uploading transcription for discovery: {t['path']}")
-        file_obj = genai.upload_file(path=t['path'], display_name=f"Transcript_{t['id']}")
-        prompt_parts.append(f"ID: {t['id']} <TRANSCRIÇÃO>")
-        prompt_parts.append(file_obj)
-
-    # Upload and add Slides
+        prompt_parts.append(f"  - {t['id']}\n")
+    
     if slides:
+        prompt_parts.append("\nSLIDES:\n")
         for s in slides:
-            logger.info(f"Uploading slide for discovery: {s['path']}")
-            file_obj = genai.upload_file(path=s['path'], display_name=f"Slide_{s['id']}")
-            prompt_parts.append(f"ID: {s['id']} <SLIDE>")
+            prompt_parts.append(f"  - {s['id']}\n")
+    
+    prompt_parts.append("\n=== ARQUIVOS COM SEUS IDs ===\n\n")
+    
+    # Upload transcriptions com ID ANTES do arquivo
+    for idx, t in enumerate(transcriptions, 1):
+        logger.info(f"Uploading transcription {idx} for discovery: {t['path']}")
+        file_obj = genai.upload_file(path=t['path'], display_name=f"Transcript_{idx}")
+        
+        # ID ANTES do arquivo (CRÍTICO!)
+        prompt_parts.append(f"TRANSCRIÇÃO ID: {t['id']}\n")
+        prompt_parts.append(file_obj)
+        prompt_parts.append("\n")
+    
+    # Upload slides com ID ANTES do arquivo
+    if slides:
+        for idx, s in enumerate(slides, 1):
+            logger.info(f"Uploading slide {idx} for discovery: {s['path']}")
+            file_obj = genai.upload_file(path=s['path'], display_name=f"Slide_{idx}")
+            
+            # ID ANTES do arquivo (CRÍTICO!)
+            prompt_parts.append(f"SLIDE ID: {s['id']}\n")
             prompt_parts.append(file_obj)
+            prompt_parts.append("\n")
+    
+    # Instrução final
+    prompt_parts.append("""
+=== INSTRUÇÕES FINAIS ===
 
-    prompt_parts.append("Gere o JSON do sumário relacionando as seções aos IDs acima.")
+Para cada seção que você criar:
+1. Identifique qual TRANSCRIÇÃO contém o conteúdo principal
+2. Use o ID que apareceu ANTES desse arquivo no campo `source_transcription_id`
+3. Se houver SLIDE relacionado, use o ID que apareceu ANTES dele no campo `source_slide_id`
+4. Se não houver slide, use `null` em `source_slide_id`
+
+Gere o JSON do sumário agora.
+""")
 
     logger.info("Calling Gemini Flash for Discovery...")
     
