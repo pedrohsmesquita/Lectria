@@ -60,9 +60,13 @@ const BooksDashboard: React.FC = () => {
         }
     }, [navigate]);
 
+    // Initial fetch on mount
     useEffect(() => {
         fetchBooks();
+    }, [fetchBooks]);
 
+    // Polling logic
+    useEffect(() => {
         // Determine polling interval based on current book states
         const hasActiveProcessing = books.some(book =>
             ['PROCESSANDO', 'ANALISANDO_CONTEUDO', 'GERANDO_SUMARIO', 'GERANDO_CONTEUDO'].includes(book.status)
