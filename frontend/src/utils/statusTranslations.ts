@@ -17,9 +17,13 @@ export const STATUS_TRANSLATIONS: Record<string, string> = {
     EXTRACTING_AUDIO: 'Extraindo áudio',
     UPLOADING_TO_GEMINI: 'Enviando para análise',
     ANALYZING_CONTENT: 'Analisando conteúdo',
+    ANALISANDO_CONTEUDO: 'Analisando conteúdo',
     GENERATING_STRUCTURE: 'Gerando estrutura',
+    GERANDO_SUMARIO: 'Gerando sumário',
     DISCOVERY_COMPLETE: 'Estrutura gerada',
     ESTRUTURA_GERADA: 'Estrutura gerada',
+    AGUARDANDO_GERACAO: 'Aguardando geração',
+    GERANDO_CONTEUDO: 'Gerando conteúdo',
     COMPLETED: 'Concluído',
     CONCLUIDO: 'Concluído',
     ERROR: 'Erro',
@@ -47,7 +51,7 @@ export function translateStatus(status: string): string {
 export function getStatusColor(status: string): string {
     if (['COMPLETED', 'CONCLUIDO', 'SUCCESS', 'SUCESSO', 'DISCOVERY_COMPLETE', 'ESTRUTURA_GERADA', 'success'].includes(status)) {
         return 'success';
-    } else if (['PROCESSING', 'PROCESSANDO', 'EXTRACTING_AUDIO', 'UPLOADING_TO_GEMINI', 'ANALYZING_CONTENT', 'GENERATING_STRUCTURE', 'uploading'].includes(status)) {
+    } else if (['PROCESSING', 'PROCESSANDO', 'EXTRACTING_AUDIO', 'UPLOADING_TO_GEMINI', 'ANALYZING_CONTENT', 'ANALISANDO_CONTEUDO', 'GENERATING_STRUCTURE', 'GERANDO_SUMARIO', 'GERANDO_CONTEUDO', 'uploading'].includes(status)) {
         return 'processing';
     } else if (['ERROR', 'ERRO', 'error'].includes(status)) {
         return 'error';
