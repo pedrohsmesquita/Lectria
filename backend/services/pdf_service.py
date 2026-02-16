@@ -275,7 +275,7 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
 
     for chapter, sections in chapter_sections:
         # Linha do capítulo no sumário
-        story.append(Paragraph(f"Capítulo {chapter.order} — {chapter.title}", styles["toc_chapter"]))
+        story.append(Paragraph(f"{chapter.order} {chapter.title}", styles["toc_chapter"]))
         
         for section in sections:
             # Linha da seção no sumário (com recuo e numeração X.Y)
@@ -285,16 +285,17 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
     # Incluir Referências no sumário se existirem
     if references:
         next_chapter_number = len(chapters) + 1
-        story.append(Paragraph(f"Capítulo {next_chapter_number} — Referências", styles["toc_chapter"]))
+        story.append(Paragraph(f"{next_chapter_number} Referências", styles["toc_chapter"]))
 
     story.append(PageBreak())
 
     # --- Conteúdo por capítulo ---
     for chapter, sections in chapter_sections:
-        story.append(Paragraph(f"Capítulo {chapter.order} — {chapter.title}", styles["chapter_title"]))
+        story.append(Paragraph(f"{chapter.order} {chapter.title}", styles["chapter_title"]))
 
         for section in sections:
-            story.append(Paragraph(section.title, styles["section_title"]))
+            section_number = f"{chapter.order}.{section.order}"
+            story.append(Paragraph(f"{section_number} {section.title}", styles["section_title"]))
 
             # Buscar assets da seção para substituir placeholders
             assets: List[SectionAssets] = (
@@ -395,7 +396,7 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
         
         story.append(
             Paragraph(
-                f"Capítulo {next_chapter_number} — Referências",
+                f"{next_chapter_number} Referências",
                 styles["chapter_title"]
             )
         )
