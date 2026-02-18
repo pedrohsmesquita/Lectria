@@ -11,7 +11,7 @@ from models.chapters import Chapters
 from models.sections import Sections
 from models.books import Books
 from models.videos import Videos
-from schemas.chapter_schemas import ChapterResponse, SectionResponse, ChapterUpdate, SectionUpdate
+from schemas.chapter_schemas import ChapterResponse, SectionResponse, ChapterUpdate, SectionUpdate, BookStructureUpdate
 from security import get_current_user
 
 router = APIRouter(prefix="/books", tags=["chapters"])
@@ -213,3 +213,63 @@ async def update_section(
         status=section.status,
         video_filename=video_filename
     )
+
+
+@router.put("/{book_id}/structure")
+async def update_book_structure(
+    book_id: UUID,
+    structure: BookStructureUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Bulk update the structure of a book (chapter orders, section orders, and chapter associations).
+    """
+    user_id = current_user["id"]
+    
+    # Verify book ownership
+    verify_book_ownership(book_id, user_id, db)
+    
+    # Check if book is already being processed (optional, but good for safety)
+    book = db.query(Books).filter(Books.id == book_id).first()
+    # If any section is not PENDING, we might want to block structure changes 
+    # to avoid mess with already generated content.
+    # However, the user explicitly asked for this check in the frontend.
+    # Let's add it here too for security.
+    processing_sections = db.query(Sections).join(Chapters).filter(
+        Chapters.book_id == book_id,
+        ~Sections.status.in_(["PENDENTE", "ESTRUTURA_GERADA"])
+    ).count()
+    
+    if processing_sections > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Não é possível alterar a estrutura após o início do processamento detalhado."
+        )
+
+    # 1. Update Chapter orders
+    for chap_data in structure.chapters:
+        chapter = db.query(Chapters).filter(
+            Chapters.id == chap_data.id,
+            Chapters.book_id == book_id
+        ).first()
+        
+        if chapter:
+            chapter.order = chap_data.order
+            
+            # 2. Update Section orders and chapter associations
+            for sec_data in chap_data.sections:
+                section = db.query(Sections).filter(Sections.id == sec_data.id).first()
+                if section:
+                    # Verify the section belongs to a chapter of THIS book
+                    dest_chapter = db.query(Chapters).filter(
+                        Chapters.id == sec_data.chapter_id,
+                        Chapters.book_id == book_id
+                    ).first()
+                    
+                    if dest_chapter:
+                        section.order = sec_data.order
+                        section.chapter_id = sec_data.chapter_id
+    
+    db.commit()
+    return {"message": "Estrutura atualizada com sucesso"}
