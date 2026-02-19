@@ -273,7 +273,9 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
     story.append(Paragraph("Sumário", styles["toc_title"]))
     story.append(Spacer(1, 1 * cm))
 
-    for chapter, sections in chapter_sections:
+    regular_chapters = [(ch, secs) for ch, secs in chapter_sections if not ch.is_bibliography]
+
+    for chapter, sections in regular_chapters:
         # Linha do capítulo no sumário
         story.append(Paragraph(f"{chapter.order} {chapter.title}", styles["toc_chapter"]))
         
@@ -284,13 +286,17 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
             
     # Incluir Referências no sumário se existirem
     if references:
-        next_chapter_number = len(chapters) + 1
+        next_chapter_number = len(regular_chapters) + 1
         story.append(Paragraph(f"{next_chapter_number} Referências", styles["toc_chapter"]))
 
     story.append(PageBreak())
 
     # --- Conteúdo por capítulo ---
     for chapter, sections in chapter_sections:
+        # Pular o capítulo de bibliografia (ele é gerado separadamente no final)
+        if chapter.is_bibliography:
+            continue
+
         story.append(Paragraph(f"{chapter.order} {chapter.title}", styles["chapter_title"]))
 
         for section in sections:
@@ -391,8 +397,8 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
 
     # --- Capítulo de Referências (se existirem) ---
     if references:
-        # Calcular o número do próximo capítulo
-        next_chapter_number = len(chapters) + 1
+        # Calcular o número com base apenas nos capítulos regulares
+        next_chapter_number = len(regular_chapters) + 1
         
         story.append(
             Paragraph(

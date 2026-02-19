@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     BookOpen, ChevronRight, Loader2, Save, X, ArrowLeft, FileText, Play, Download,
-    Edit, Trash2, ChevronUp, MoveVertical, Image as ImageIcon, Plus, Upload, ChevronDown, CheckCircle2, Clock, AlertCircle, Settings
+    Edit, Trash2, ChevronUp, MoveVertical, Image as ImageIcon, Plus, Upload, ChevronDown, CheckCircle2, Clock, AlertCircle, Settings, BookMarked
 } from 'lucide-react';
 
 // ============================================
@@ -38,6 +38,7 @@ interface Chapter {
     book_id: string;
     title: string;
     order: number;
+    is_bibliography: boolean;
     created_at: string;
     sections: Section[];
 }
@@ -61,6 +62,7 @@ const BookStructure: React.FC = () => {
     const [editTitle, setEditTitle] = useState('');
     const [editContent, setEditContent] = useState('');
     const [saving, setSaving] = useState(false);
+    const [savingBibliography, setSavingBibliography] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [generatingSectionId, setGeneratingSectionId] = useState<string | null>(null);
     const [bookStatus, setBookStatus] = useState<string>('');
@@ -537,6 +539,46 @@ const BookStructure: React.FC = () => {
         }
     };
 
+    // Handle Save Bibliography
+    const handleSaveBibliography = async () => {
+        if (!selectedItem || selectedItem.type !== 'section') return;
+
+        const confirmed = window.confirm(
+            'Alterações na numeração das referências serão aplicadas automaticamente em todas as seções do livro. Deseja continuar?'
+        );
+        if (!confirmed) return;
+
+        setSavingBibliography(true);
+        try {
+            const token = localStorage.getItem('access_token');
+            if (!token) { navigate('/login'); return; }
+
+            const response = await fetch(`http://localhost:8000/books/${bookId}/bibliography`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content_markdown: editContent })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                alert(`✅ ${result.message}\n\n📚 ${result.references_updated} referência(s) atualizada(s)\n📄 ${result.sections_affected} seção(ões) com citações atualizadas`);
+                // Refresh to reflect any changes in section contents
+                fetchChapters();
+            } else {
+                const error = await response.json();
+                alert(`Erro ao salvar bibliografia: ${error.detail || 'Erro desconhecido'}`);
+            }
+        } catch (error) {
+            console.error('Error saving bibliography:', error);
+            alert('Erro de conexão ao salvar bibliografia.');
+        } finally {
+            setSavingBibliography(false);
+        }
+    };
+
     // Handle save
     const handleSave = async () => {
         if (!selectedItem) return;
@@ -885,16 +927,25 @@ const BookStructure: React.FC = () => {
                                         <div
                                             onClick={() => handleSelectChapter(chapter)}
                                             className={`p-4 rounded-lg transition-all ${!isEditMode && selectedItem?.type === 'chapter' && selectedItem.data.id === chapter.id
-                                                ? 'bg-purple-600/30 border-2 border-purple-500'
+                                                ? chapter.is_bibliography ? 'bg-amber-600/30 border-2 border-amber-500' : 'bg-purple-600/30 border-2 border-purple-500'
                                                 : 'bg-white/5 hover:bg-white/10 border-2 border-transparent'
                                                 } ${isEditMode ? 'cursor-default' : 'cursor-pointer'}`}
                                         >
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
-                                                    <ChevronRight className="w-5 h-5 text-purple-400" />
-                                                    <span className="font-semibold text-white">
-                                                        {chapter.order}. {chapter.title}
+                                                    {chapter.is_bibliography ? (
+                                                        <BookMarked className="w-5 h-5 text-amber-400" />
+                                                    ) : (
+                                                        <ChevronRight className="w-5 h-5 text-purple-400" />
+                                                    )}
+                                                    <span className={`font-semibold ${chapter.is_bibliography ? 'text-amber-300' : 'text-white'}`}>
+                                                        {chapter.is_bibliography ? '' : chapter.order + '.'} {chapter.title}
                                                     </span>
+                                                    {chapter.is_bibliography && (
+                                                        <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full uppercase tracking-wider">
+                                                            Referências
+                                                        </span>
+                                                    )}
                                                 </div>
 
                                                 {isEditMode && (
@@ -1038,8 +1089,15 @@ const BookStructure: React.FC = () => {
                         {!isEditMode && selectedItem && (
                             <div className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
                                 <div className="flex items-center justify-between mb-6">
-                                    <h2 className="text-xl font-semibold text-white">
-                                        {selectedItem.type === 'chapter' ? 'Capítulo' : 'Seção'}
+                                    <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                                        {selectedItem.type === 'chapter'
+                                            ? ((selectedItem.data as Chapter).is_bibliography ? <><BookMarked className="w-5 h-5 text-amber-400" /> Referências Bibliográficas</> : 'Capítulo')
+                                            : (() => {
+                                                // Check if parent chapter is bibliography
+                                                const parentChapter = chapters.find(ch => ch.id === (selectedItem.data as Section).chapter_id);
+                                                return parentChapter?.is_bibliography ? <><BookMarked className="w-5 h-5 text-amber-400" /> Editar Bibliografia</> : 'Seção';
+                                            })()
+                                        }
                                     </h2>
                                     <button
                                         onClick={() => setSelectedItem(null)}
@@ -1063,13 +1121,21 @@ const BookStructure: React.FC = () => {
                                         />
                                     </div>
 
-                                    {/* Save Reminder */}
-                                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start gap-3">
-                                        <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                                        <p className="text-xs text-amber-200/80 leading-relaxed font-medium">
-                                            Lembre-se de clicar em <span className="text-white font-bold underline decoration-amber-500/30 underline-offset-2">Salvar Alterações</span> ao final da página para atualizar o conteúdo.
-                                        </p>
-                                    </div>
+                                    {/* Save Reminder — hidden for bibliography sections */}
+                                    {(() => {
+                                        const parentChapter = selectedItem.type === 'section'
+                                            ? chapters.find(ch => ch.id === (selectedItem.data as Section).chapter_id)
+                                            : null;
+                                        if (parentChapter?.is_bibliography) return null;
+                                        return (
+                                            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start gap-3">
+                                                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                                                <p className="text-xs text-amber-200/80 leading-relaxed font-medium">
+                                                    Lembre-se de clicar em <span className="text-white font-bold underline decoration-amber-500/30 underline-offset-2">Salvar Alterações</span> ao final da página para atualizar o conteúdo.
+                                                </p>
+                                            </div>
+                                        );
+                                    })()}
 
                                     {selectedItem.type === 'section' && (
                                         <>
@@ -1132,23 +1198,53 @@ const BookStructure: React.FC = () => {
 
                                     {/* Action Buttons */}
                                     <div className="pt-4 space-y-3">
-                                        <button
-                                            onClick={handleSave}
-                                            disabled={saving}
-                                            className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 font-bold text-sm tracking-wide active:scale-[0.98]"
-                                        >
-                                            {saving ? (
-                                                <>
-                                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                                    SALVANDO...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Save className="w-5 h-5" />
-                                                    SALVAR ALTERAÇÕES
-                                                </>
-                                            )}
-                                        </button>
+                                        {(() => {
+                                            // Check if the selected section belongs to a bibliography chapter
+                                            const parentChapter = selectedItem.type === 'section'
+                                                ? chapters.find(ch => ch.id === (selectedItem.data as Section).chapter_id)
+                                                : null;
+                                            const isBibSection = parentChapter?.is_bibliography === true;
+
+                                            if (isBibSection) {
+                                                return (
+                                                    <>
+                                                        {/* Bibliography warning */}
+                                                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start gap-3">
+                                                            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                                                            <p className="text-xs text-amber-200/80 leading-relaxed font-medium">
+                                                                Alterações na numeração serão aplicadas em <span className="text-white font-bold">todas as seções do livro</span>.
+                                                            </p>
+                                                        </div>
+                                                        <button
+                                                            onClick={handleSaveBibliography}
+                                                            disabled={savingBibliography}
+                                                            className="w-full py-3.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 font-bold text-sm tracking-wide active:scale-[0.98]"
+                                                        >
+                                                            {savingBibliography ? (
+                                                                <><Loader2 className="w-5 h-5 animate-spin" />SALVANDO BIBLIOGRAFIA...</>
+                                                            ) : (
+                                                                <><BookMarked className="w-5 h-5" />SALVAR BIBLIOGRAFIA</>
+                                                            )}
+                                                        </button>
+                                                    </>
+                                                );
+                                            }
+
+                                            return (
+                                                <button
+                                                    onClick={handleSave}
+                                                    disabled={saving}
+                                                    className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 font-bold text-sm tracking-wide active:scale-[0.98]"
+                                                >
+                                                    {saving ? (
+                                                        <><Loader2 className="w-5 h-5 animate-spin" />SALVANDO...</>
+                                                    ) : (
+                                                        <><Save className="w-5 h-5" />SALVAR ALTERAÇÕES</>
+                                                    )}
+                                                </button>
+                                            );
+                                        })()
+                                        }
                                     </div>
                                 </div>
                             </div>

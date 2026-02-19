@@ -90,6 +90,7 @@ async def get_book_chapters(
             book_id=chapter.book_id,
             title=chapter.title,
             order=chapter.order,
+            is_bibliography=chapter.is_bibliography,
             created_at=chapter.created_at,
             sections=sections_data
         ))
@@ -152,6 +153,7 @@ async def update_chapter(
         book_id=chapter.book_id,
         title=chapter.title,
         order=chapter.order,
+        is_bibliography=chapter.is_bibliography,
         created_at=chapter.created_at,
         sections=sections_data
     )

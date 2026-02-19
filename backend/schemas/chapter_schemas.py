@@ -45,6 +45,7 @@ class ChapterResponse(BaseModel):
     book_id: UUID = Field(..., description="Parent book ID")
     title: str = Field(..., description="Chapter title")
     order: int = Field(..., description="Position within book")
+    is_bibliography: bool = Field(False, description="True if this is the bibliography chapter")
     created_at: datetime = Field(..., description="Creation timestamp")
     sections: List[SectionResponse] = Field(default_factory=list, description="List of sections in this chapter")
     
@@ -80,3 +81,16 @@ class ChapterReorder(BaseModel):
 class BookStructureUpdate(BaseModel):
     """Request schema for bulk updating the entire book structure"""
     chapters: List[ChapterReorder]
+
+
+class BibliographyUpdate(BaseModel):
+    """Request schema for updating bibliography content"""
+    content_markdown: str = Field(..., description="Full markdown text of the bibliography as edited by the user")
+
+
+class BibliographyUpdateResponse(BaseModel):
+    """Response schema after updating bibliography"""
+    message: str
+    references_updated: int
+    sections_affected: int
+    content_markdown: str

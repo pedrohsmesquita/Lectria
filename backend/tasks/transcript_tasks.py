@@ -8,6 +8,7 @@ from models.transcriptions import Transcription
 from models.slides import Slide
 from models.chapters import Chapters
 from models.sections import Sections
+from models.global_references import GlobalReferences
 from models.section_assets import SectionAssets
 from services.gemini_service import generate_book_discovery, generate_section_content
 from services.image_extraction_service import extract_image_from_slide
@@ -157,7 +158,72 @@ def process_book_content_sequential_task(self, book_id: str):
         if not book: return
 
         if not section:
-            # All done!
+            # All content sections done — generate bibliography chapter
+            from sqlalchemy import func as sqlfunc
+
+            # Check if a bibliography chapter already exists
+            bib_chapter = db.query(Chapters).filter(
+                Chapters.book_id == UUID(book_id),
+                Chapters.is_bibliography == True
+            ).first()
+
+            refs = db.query(GlobalReferences).filter(
+                GlobalReferences.book_id == UUID(book_id)
+            ).order_by(GlobalReferences.reference_number.asc()).all()
+
+            if refs:
+                # Build bibliography markdown
+                bib_lines = []
+                for ref in refs:
+                    bib_lines.append(f"[{ref.reference_number}] {ref.full_reference_abnt}")
+                bib_markdown = "\n\n".join(bib_lines)
+
+                if not bib_chapter:
+                    # Determine order for bibliography (after all regular chapters)
+                    max_order = db.query(sqlfunc.max(Chapters.order)).filter(
+                        Chapters.book_id == UUID(book_id)
+                    ).scalar() or 0
+
+                    bib_chapter = Chapters(
+                        book_id=UUID(book_id),
+                        title="Referências",
+                        order=max_order + 1,
+                        is_bibliography=True
+                    )
+                    db.add(bib_chapter)
+                    db.flush()
+
+                    bib_section = Sections(
+                        chapter_id=bib_chapter.id,
+                        title="Lista de Referências",
+                        order=1,
+                        start_time=0.0,
+                        end_time=0.0,
+                        content_markdown=bib_markdown,
+                        status="SUCESSO"
+                    )
+                    db.add(bib_section)
+                else:
+                    # Update existing bibliography section
+                    existing_bib_section = db.query(Sections).filter(
+                        Sections.chapter_id == bib_chapter.id
+                    ).first()
+                    if existing_bib_section:
+                        existing_bib_section.content_markdown = bib_markdown
+                    else:
+                        bib_section = Sections(
+                            chapter_id=bib_chapter.id,
+                            title="Lista de Referências",
+                            order=1,
+                            start_time=0.0,
+                            end_time=0.0,
+                            content_markdown=bib_markdown,
+                            status="SUCESSO"
+                        )
+                        db.add(bib_section)
+
+                logger.info(f"Bibliography chapter generated for book {book_id} with {len(refs)} references")
+
             book.status = "CONCLUIDO"
             book.current_step = "Livro gerado com sucesso!"
             book.processing_progress = 100
