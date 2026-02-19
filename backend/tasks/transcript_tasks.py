@@ -10,6 +10,7 @@ from models.chapters import Chapters
 from models.sections import Sections
 from models.section_assets import SectionAssets
 from services.gemini_service import generate_book_discovery, generate_section_content
+from services.image_extraction_service import extract_image_from_slide
 import os
 from uuid import UUID
 import logging
@@ -278,19 +279,54 @@ def process_section_content_task(self, section_id: str, trigger_next: bool = Tru
         section.content_markdown = markdown_content
         section.status = "SUCESSO"
         
-        # ========== SAVE ASSETS (SLIDES) ==========
+        # ========== SAVE ASSETS (SLIDES) AND EXTRACT IMAGES ==========
+        import re
+        success_placeholders = []
         for asset_data in content_result.get("section_assets", []):
-            asset = SectionAssets(
-                section_id=section.id,
-                placeholder=asset_data["placeholder"],
-                caption=asset_data["caption"],
-                source_type='SLIDE',
-                timestamp=None,  # Not used for slides
-                slide_page=asset_data.get("slide_page"),
-                storage_path=slide.storage_path if slide else "N/A",
-                crop_info=asset_data["crop_info"]
-            )
-            db.add(asset)
+            try:
+                # Early check for required crop data
+                if not asset_data.get("crop_info") or not asset_data.get("slide_page"):
+                    logger.warning(f"Skipping asset {asset_data.get('placeholder')} due to missing crop/page info")
+                    continue
+
+                # Perform extraction
+                extracted_path = extract_image_from_slide(
+                    pdf_path=slide.storage_path,
+                    page_number=asset_data["slide_page"],
+                    crop_info=asset_data["crop_info"],
+                    user_id=book.author_profile_id,
+                    book_id=book.id,
+                    placeholder=asset_data["placeholder"],
+                    section_id=section.id
+                )
+
+                asset = SectionAssets(
+                    section_id=section.id,
+                    placeholder=asset_data["placeholder"],
+                    caption=asset_data["caption"],
+                    source_type='SLIDE',
+                    timestamp=None,
+                    slide_page=asset_data.get("slide_page"),
+                    storage_path=extracted_path,
+                    crop_info=asset_data["crop_info"]
+                )
+                db.add(asset)
+                success_placeholders.append(asset_data["placeholder"])
+                logger.info(f"Asset extracted and saved: {asset_data['placeholder']} -> {extracted_path}")
+            except Exception as e:
+                logger.error(f"Failed to extract asset {asset_data.get('placeholder')}: {e}. Skipping.")
+                continue
+
+        # Sync markdown: remove placeholders for which extraction failed
+        final_markdown = section.content_markdown
+        all_placeholders = re.findall(r"\[IMAGE_\d+\]", final_markdown)
+        for p in all_placeholders:
+            if p not in success_placeholders:
+                logger.warning(f"Removing placeholder {p} from markdown because extraction failed")
+                # Remove placeholder with surrounding whitespace/newlines
+                final_markdown = re.sub(rf"\n*\s*{re.escape(p)}\s*\n*", "\n\n", final_markdown)
+        
+        section.content_markdown = final_markdown.strip()
 
         db.commit()
         logger.info(f"Section {section_id} processed successfully with {len(reference_mapping)} references")

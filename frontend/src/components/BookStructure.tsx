@@ -1,10 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { BookOpen, ChevronRight, Loader2, Save, X, ArrowLeft, FileText, Play, Download } from 'lucide-react';
+import {
+    BookOpen, ChevronRight, Loader2, Save, X, ArrowLeft, FileText, Play, Download,
+    Edit, Trash2, ChevronUp, MoveVertical, Image as ImageIcon, Plus, Upload, ChevronDown, CheckCircle2, Clock, AlertCircle, Settings
+} from 'lucide-react';
 
 // ============================================
 // Types
 // ============================================
+
+interface SectionAsset {
+    id: string;
+    placeholder: string;
+    caption: string | null;
+    source_type: string;
+    storage_path: string;
+    slide_page: number | null;
+    crop_info: any | null;
+}
 
 interface Section {
     id: string;
@@ -17,6 +30,7 @@ interface Section {
     content_markdown: string | null;
     status: string;
     video_filename: string | null;
+    assets: SectionAsset[];
 }
 
 interface Chapter {
@@ -54,6 +68,24 @@ const BookStructure: React.FC = () => {
     // Editing mode state
     const [isEditMode, setIsEditMode] = useState(false);
     const [tempChapters, setTempChapters] = useState<Chapter[]>([]);
+
+    // Asset Management State
+    const [isVisualMode, setIsVisualMode] = useState(true);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [uploadCaption, setUploadCaption] = useState('');
+    const [uploadFile, setUploadFile] = useState<File | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+
+    // Unified Edit Asset Modal State
+    const [isEditAssetModalOpen, setIsEditAssetModalOpen] = useState(false);
+    const [editingAsset, setEditingAsset] = useState<SectionAsset | null>(null);
+    const [editAssetCaption, setEditAssetCaption] = useState('');
+    const [editAssetFile, setEditAssetFile] = useState<File | null>(null);
+    const [isSavingAsset, setIsSavingAsset] = useState(false);
+
+    // Manual Image Insertion Ref & State
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const [lastCursorPosition, setLastCursorPosition] = useState<number | null>(null);
 
     const fetchBookDetails = useCallback(async () => {
         try {
@@ -156,6 +188,253 @@ const BookStructure: React.FC = () => {
             setSelectedItem(null);
         }
         setIsEditMode(!isEditMode);
+    };
+
+    const handleUploadAsset = async () => {
+        if (!selectedItem || selectedItem.type !== 'section' || !uploadFile) return;
+
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.append('file', uploadFile);
+        formData.append('caption', uploadCaption);
+
+        try {
+            const token = localStorage.getItem('access_token');
+            const response = await fetch(`http://localhost:8000/assets/${selectedItem.data.id}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData,
+            });
+
+            if (!response.ok) throw new Error('Falha ao enviar imagem');
+
+            const data = await response.json();
+
+            // Update local state
+            setChapters((prev: Chapter[]) => prev.map((ch: Chapter) => ({
+                ...ch,
+                sections: ch.sections.map((sec: Section) => {
+                    if (sec.id === selectedItem.data.id) {
+                        let newContent = sec.content_markdown || '';
+                        const placeholder = `\n\n${data.asset.placeholder}\n\n`;
+
+                        if (lastCursorPosition !== null) {
+                            newContent =
+                                newContent.slice(0, lastCursorPosition) +
+                                placeholder +
+                                newContent.slice(lastCursorPosition);
+                        } else {
+                            newContent += placeholder;
+                        }
+
+                        return {
+                            ...sec,
+                            assets: [...(sec.assets || []), data.asset],
+                            content_markdown: newContent
+                        };
+                    }
+                    return sec;
+                })
+            })));
+
+            // Also update the current editContent if it's the active section
+            if (selectedItem.data.id === selectedItem.data.id) {
+                setEditContent(prev => {
+                    const placeholder = `\n\n${data.asset.placeholder}\n\n`;
+                    if (lastCursorPosition !== null) {
+                        return prev.slice(0, lastCursorPosition) + placeholder + prev.slice(lastCursorPosition);
+                    }
+                    return prev + placeholder;
+                });
+            }
+
+            // Reset modal state
+            setIsUploadModalOpen(false);
+            setUploadFile(null);
+            setUploadCaption('');
+            setLastCursorPosition(null);
+
+        } catch (error) {
+            console.error('Error uploading asset:', error);
+            alert('Erro ao enviar imagem. Tente novamente.');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleDeleteAsset = async (assetId: string) => {
+        if (!window.confirm('Tem certeza que deseja remover esta imagem?')) return;
+
+        try {
+            const token = localStorage.getItem('access_token');
+            const response = await fetch(`http://localhost:8000/assets/${assetId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) throw new Error('Falha ao deletar imagem');
+
+            // Find the placeholder before updating state
+            let deletedPlaceholder = '';
+            chapters.forEach(ch => {
+                ch.sections.forEach(sec => {
+                    if (selectedItem?.type === 'section' && sec.id === selectedItem.data.id) {
+                        const asset = sec.assets.find(a => a.id === assetId);
+                        if (asset) deletedPlaceholder = asset.placeholder;
+                    }
+                });
+            });
+
+            // Update local state
+            setChapters((prev: Chapter[]) => prev.map((ch: Chapter) => ({
+                ...ch,
+                sections: ch.sections.map((sec: Section) => {
+                    if (selectedItem?.type === 'section' && sec.id === selectedItem.data.id) {
+                        return {
+                            ...sec,
+                            assets: sec.assets.filter((a: SectionAsset) => a.id !== assetId),
+                            content_markdown: deletedPlaceholder
+                                ? sec.content_markdown?.replace(new RegExp(`\\n*\\s*${deletedPlaceholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n*`, 'g'), '\n\n').trim() || ''
+                                : sec.content_markdown
+                        };
+                    }
+                    return sec;
+                })
+            })));
+
+            // Also update the current editContent if it's the active section
+            if (deletedPlaceholder && selectedItem?.type === 'section') {
+                setEditContent(prev => {
+                    const regex = new RegExp(`\\n*\\s*${deletedPlaceholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n*`, 'g');
+                    return prev.replace(regex, '\n\n').trim();
+                });
+            }
+
+            // Refresh from server to ensure sync
+            fetchChapters();
+        } catch (error) {
+            console.error('Error deleting asset:', error);
+            alert('Erro ao remover imagem.');
+        }
+    };
+
+    const handleUpdateAsset = async (assetId: string, options: { caption?: string, file?: File }) => {
+        const formData = new FormData();
+        if (options.caption !== undefined) formData.append('caption', options.caption);
+        if (options.file) formData.append('file', options.file);
+
+        try {
+            const token = localStorage.getItem('access_token');
+            const response = await fetch(`http://localhost:8000/assets/${assetId}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData
+            });
+
+            if (!response.ok) throw new Error('Falha ao atualizar recurso');
+
+            const data = await response.json();
+
+            setChapters((prev: Chapter[]) => prev.map((ch: Chapter) => ({
+                ...ch,
+                sections: ch.sections.map((sec: Section) => {
+                    if (selectedItem?.type === 'section' && sec.id === selectedItem.data.id) {
+                        return {
+                            ...sec,
+                            assets: sec.assets.map((a: SectionAsset) =>
+                                a.id === assetId
+                                    ? {
+                                        ...a,
+                                        caption: data.caption ?? a.caption,
+                                        storage_path: data.storage_path ?? a.storage_path
+                                    }
+                                    : a
+                            )
+                        };
+                    }
+                    return sec;
+                })
+            })));
+
+            // Re-fetch to ensure UI is in sync with backend
+            fetchChapters();
+        } catch (error) {
+            console.error('Error updating asset:', error);
+            alert('Erro ao atualizar imagem.');
+        }
+    };
+
+    const renderContent = (content: string | null, assets: SectionAsset[]) => {
+        if (!content) return <p className="text-slate-500 italic">Sem conteúdo gerado.</p>;
+
+        const parts = content.split(/(\[IMAGE_\d+\])/g);
+
+        return (
+            <div className="space-y-4">
+                {parts.map((part, index) => {
+                    const match = part.match(/\[IMAGE_(\d+)\]/);
+                    if (match) {
+                        const asset = assets.find(a => a.placeholder === part);
+                        if (!asset) return <div key={index} className="p-4 bg-red-50 text-red-500 border border-red-200 rounded">Imagem {part} não encontrada ou inválida</div>;
+
+                        const rawPath = asset.storage_path.replace(/\\/g, '/');
+                        const pathAfterMedia = rawPath.includes('/media/')
+                            ? rawPath.split('/media/')[1]
+                            : rawPath.includes('media/')
+                                ? rawPath.split('media/')[1]
+                                : rawPath;
+
+                        const imageUrl = `http://localhost:8000/media/${pathAfterMedia}`;
+
+                        return (
+                            <div key={index} className="group relative my-6 bg-slate-50 rounded-lg overflow-hidden border border-slate-200 shadow-sm transition-all hover:shadow-md">
+                                <img
+                                    src={imageUrl}
+                                    alt={asset.caption || "Imagem da seção"}
+                                    className="w-full h-auto object-contain bg-slate-100"
+                                />
+                                {asset.caption && (
+                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-6 text-center text-white text-sm font-medium">
+                                        {asset.caption}
+                                    </div>
+                                )}
+                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                        onClick={() => {
+                                            setEditingAsset(asset);
+                                            setEditAssetCaption(asset.caption || '');
+                                            setEditAssetFile(null);
+                                            setIsEditAssetModalOpen(true);
+                                        }}
+                                        className="p-1.5 bg-white/90 hover:bg-white rounded-full text-indigo-600 shadow-sm transition-all hover:scale-110"
+                                        title="Editar imagem e legenda"
+                                    >
+                                        <Settings className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteAsset(asset.id)}
+                                        className="p-1.5 bg-red-500 hover:bg-red-600 rounded-full text-white shadow-sm transition-all hover:scale-110"
+                                        title="Remover imagem"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/50 text-white text-[10px] font-bold rounded uppercase tracking-wider backdrop-blur-sm">
+                                    {asset.placeholder}
+                                </div>
+                            </div>
+                        );
+                    }
+                    return <div key={index} className="whitespace-pre-wrap leading-relaxed text-slate-800">{part}</div>;
+                })}
+            </div>
+        );
     };
 
     const moveChapter = (index: number, direction: 'up' | 'down') => {
@@ -600,7 +879,7 @@ const BookStructure: React.FC = () => {
                             </h2>
 
                             <div className="space-y-4">
-                                {(isEditMode ? tempChapters : chapters).map((chapter, chapterIndex) => (
+                                {(isEditMode ? tempChapters : chapters).map((chapter: Chapter, chapterIndex: number) => (
                                     <div key={chapter.id} className="space-y-2">
                                         {/* Chapter */}
                                         <div
@@ -621,7 +900,7 @@ const BookStructure: React.FC = () => {
                                                 {isEditMode && (
                                                     <div className="flex items-center gap-2">
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); moveChapter(chapterIndex, 'up'); }}
+                                                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); moveChapter(chapterIndex, 'up'); }}
                                                             disabled={chapterIndex === 0}
                                                             className="p-1 hover:bg-white/20 rounded disabled:opacity-30 transition-colors"
                                                             title="Mover capítulo para cima"
@@ -629,7 +908,7 @@ const BookStructure: React.FC = () => {
                                                             <ChevronRight className="w-5 h-5 -rotate-90" />
                                                         </button>
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); moveChapter(chapterIndex, 'down'); }}
+                                                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); moveChapter(chapterIndex, 'down'); }}
                                                             disabled={chapterIndex === tempChapters.length - 1}
                                                             className="p-1 hover:bg-white/20 rounded disabled:opacity-30 transition-colors"
                                                             title="Mover capítulo para baixo"
@@ -643,7 +922,7 @@ const BookStructure: React.FC = () => {
 
                                         {/* Sections */}
                                         <div className="ml-8 space-y-2">
-                                            {chapter.sections.map((section, sectionIndex) => (
+                                            {chapter.sections.map((section: Section, sectionIndex: number) => (
                                                 <div
                                                     key={section.id}
                                                     onClick={() => handleSelectSection(section)}
@@ -665,7 +944,7 @@ const BookStructure: React.FC = () => {
                                                                     {/* Move arrows */}
                                                                     <div className="flex items-center border-r border-white/10 pr-2 mr-2">
                                                                         <button
-                                                                            onClick={(e) => { e.stopPropagation(); moveSection(chapterIndex, sectionIndex, 'up'); }}
+                                                                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); moveSection(chapterIndex, sectionIndex, 'up'); }}
                                                                             disabled={sectionIndex === 0}
                                                                             className="p-1 hover:bg-white/20 rounded disabled:opacity-30 transition-colors"
                                                                             title="Mover seção para cima"
@@ -673,7 +952,7 @@ const BookStructure: React.FC = () => {
                                                                             <ChevronRight className="w-4 h-4 -rotate-90" />
                                                                         </button>
                                                                         <button
-                                                                            onClick={(e) => { e.stopPropagation(); moveSection(chapterIndex, sectionIndex, 'down'); }}
+                                                                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); moveSection(chapterIndex, sectionIndex, 'down'); }}
                                                                             disabled={sectionIndex === chapter.sections.length - 1}
                                                                             className="p-1 hover:bg-white/20 rounded disabled:opacity-30 transition-colors"
                                                                             title="Mover seção para baixo"
@@ -685,10 +964,10 @@ const BookStructure: React.FC = () => {
                                                                     {/* Chapter select */}
                                                                     <select
                                                                         value={chapter.id}
-                                                                        onChange={(e) => moveSectionToChapter(chapterIndex, sectionIndex, e.target.value)}
+                                                                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => moveSectionToChapter(chapterIndex, sectionIndex, e.target.value)}
                                                                         className="bg-slate-800 text-xs text-white border border-white/10 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-blue-500"
                                                                     >
-                                                                        {tempChapters.map(ch => (
+                                                                        {tempChapters.map((ch: Chapter) => (
                                                                             <option key={ch.id} value={ch.id}>
                                                                                 Mover p/ Cap {ch.order}
                                                                             </option>
@@ -702,7 +981,7 @@ const BookStructure: React.FC = () => {
                                                                     </span>
                                                                     {(section.status === 'PENDENTE' || section.status === 'ERRO') && (
                                                                         <button
-                                                                            onClick={(e) => {
+                                                                            onClick={(e: React.MouseEvent) => {
                                                                                 e.stopPropagation();
                                                                                 handleGenerateSectionContent(section.id);
                                                                             }}
@@ -755,12 +1034,12 @@ const BookStructure: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Right Panel - Edit Sidebar */}
+                        {/* Right Panel - Interactive Sidebar */}
                         {!isEditMode && selectedItem && (
                             <div className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
-                                <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center justify-between mb-6">
                                     <h2 className="text-xl font-semibold text-white">
-                                        {selectedItem.type === 'chapter' ? 'Editar Capítulo' : 'Editar Seção'}
+                                        {selectedItem.type === 'chapter' ? 'Capítulo' : 'Seção'}
                                     </h2>
                                     <button
                                         onClick={() => setSelectedItem(null)}
@@ -770,71 +1049,343 @@ const BookStructure: React.FC = () => {
                                     </button>
                                 </div>
 
-                                {/* Title Field */}
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                                        Título
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editTitle}
-                                        onChange={(e) => setEditTitle(e.target.value)}
-                                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                    />
-                                </div>
+                                <div className="space-y-6">
+                                    {/* Title Field */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                            Título
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={editTitle}
+                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditTitle(e.target.value)}
+                                            className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                        />
+                                    </div>
 
-                                {/* Section-specific fields */}
-                                {selectedItem.type === 'section' && (
-                                    <>
-                                        {/* Status */}
-                                        <div className="mb-4">
-                                            <label className="block text-sm font-medium text-slate-300 mb-2">
-                                                Status
-                                            </label>
-                                            <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(selectedItem.data.status)}`}>
-                                                {selectedItem.data.status}
-                                            </span>
-                                        </div>
+                                    {/* Save Reminder */}
+                                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start gap-3">
+                                        <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                                        <p className="text-xs text-amber-200/80 leading-relaxed font-medium">
+                                            Lembre-se de clicar em <span className="text-white font-bold underline decoration-amber-500/30 underline-offset-2">Salvar Alterações</span> ao final da página para atualizar o conteúdo.
+                                        </p>
+                                    </div>
 
-                                        {/* Content Markdown */}
-                                        <div className="mb-4">
-                                            <label className="block text-sm font-medium text-slate-300 mb-2">
-                                                Conteúdo (Markdown)
-                                            </label>
-                                            <textarea
-                                                value={editContent}
-                                                onChange={(e) => setEditContent(e.target.value)}
-                                                rows={12}
-                                                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"
-                                                placeholder="Conteúdo em Markdown será gerado automaticamente..."
-                                            />
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* Save Button */}
-                                <button
-                                    onClick={handleSave}
-                                    disabled={saving}
-                                    className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-slate-600 disabled:to-slate-700 text-white rounded-lg transition-all flex items-center justify-center gap-2"
-                                >
-                                    {saving ? (
+                                    {selectedItem.type === 'section' && (
                                         <>
-                                            <Loader2 className="w-5 h-5 animate-spin" />
-                                            Salvando...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save className="w-5 h-5" />
-                                            Salvar Alterações
+                                            {/* Content Area */}
+                                            <div>
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                                        Conteúdo
+                                                    </label>
+                                                    <div className="flex bg-black/30 p-1 rounded-lg">
+                                                        <button
+                                                            onClick={() => setIsVisualMode(true)}
+                                                            className={`px-3 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-colors ${isVisualMode ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                                                        >
+                                                            Visual
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setIsVisualMode(false)}
+                                                            className={`px-3 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-colors ${!isVisualMode ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                                                        >
+                                                            EDITOR
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {!isVisualMode && (
+                                                    <div className="flex items-center gap-2 mb-4">
+                                                        <button
+                                                            onClick={() => {
+                                                                if (textareaRef.current) {
+                                                                    setLastCursorPosition(textareaRef.current.selectionStart);
+                                                                }
+                                                                setIsUploadModalOpen(true);
+                                                            }}
+                                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 text-xs font-bold rounded-xl border border-indigo-500/20 transition-all active:scale-[0.98] group"
+                                                        >
+                                                            <ImageIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                                            INSERIR IMAGEM NO CURSOR
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                {isVisualMode ? (
+                                                    <div className="bg-white border border-slate-200 rounded-xl p-6 min-h-[400px] overflow-hidden shadow-inner">
+                                                        {renderContent(editContent, (selectedItem.data as Section).assets || [])}
+                                                    </div>
+                                                ) : (
+                                                    <textarea
+                                                        ref={textareaRef}
+                                                        value={editContent}
+                                                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditContent(e.target.value)}
+                                                        rows={20}
+                                                        className="w-full px-4 py-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-[13px] leading-relaxed custom-scrollbar shadow-inner"
+                                                        placeholder="Conteúdo em Markdown..."
+                                                    />
+                                                )}
+                                            </div>
                                         </>
                                     )}
-                                </button>
+
+                                    {/* Action Buttons */}
+                                    <div className="pt-4 space-y-3">
+                                        <button
+                                            onClick={handleSave}
+                                            disabled={saving}
+                                            className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 font-bold text-sm tracking-wide active:scale-[0.98]"
+                                        >
+                                            {saving ? (
+                                                <>
+                                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                                    SALVANDO...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Save className="w-5 h-5" />
+                                                    SALVAR ALTERAÇÕES
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
                 )}
             </div>
+
+            {/* Manual Image Upload Modal */}
+            {isUploadModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                    <div className="bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-white/10 animate-in fade-in zoom-in duration-200">
+                        <div className="px-8 py-6 border-b border-white/10 flex items-center justify-between bg-white/5">
+                            <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                                <div className="p-2 bg-indigo-500/20 rounded-lg">
+                                    <ImageIcon className="w-5 h-5 text-indigo-400" />
+                                </div>
+                                Inserir Imagem
+                            </h3>
+                            <button
+                                onClick={() => setIsUploadModalOpen(false)}
+                                className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-all"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        <div className="p-8 space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-3">
+                                    Arquivo de Imagem local
+                                </label>
+                                <div className={`relative border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center transition-all ${uploadFile ? 'border-indigo-500/50 bg-indigo-500/5' : 'border-white/10 hover:border-indigo-500/30 bg-white/5 hover:bg-white/10'}`}>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUploadFile(e.target.files?.[0] || null)}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    />
+                                    {uploadFile ? (
+                                        <>
+                                            <div className="p-3 bg-indigo-500/20 rounded-2xl mb-4">
+                                                <CheckCircle2 className="w-8 h-8 text-indigo-400" />
+                                            </div>
+                                            <span className="text-sm font-semibold text-white truncate max-w-full px-4">{uploadFile.name}</span>
+                                            <span className="text-xs text-indigo-400/70 mt-2 font-medium">Clique para selecionar outro</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="p-3 bg-white/5 rounded-2xl mb-4">
+                                                <Upload className="w-8 h-8 text-slate-500" />
+                                            </div>
+                                            <span className="text-sm text-slate-300 font-semibold mb-1">Selecionar Imagem</span>
+                                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">PNG, JPG, WebP</span>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-3">
+                                    Legenda explicativa
+                                </label>
+                                <textarea
+                                    value={uploadCaption}
+                                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setUploadCaption(e.target.value)}
+                                    placeholder="Ex: Diagrama mostrando o ciclo da água..."
+                                    className="w-full px-4 py-3 text-sm bg-white/5 border border-white/10 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[100px] resize-none"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="px-8 py-6 bg-white/5 border-t border-white/10 flex gap-4">
+                            <button
+                                onClick={() => setIsUploadModalOpen(false)}
+                                className="flex-1 px-6 py-3.5 text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5 rounded-2xl transition-all uppercase tracking-wider"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleUploadAsset}
+                                disabled={!uploadFile || !uploadCaption || isUploading}
+                                className="flex-1 px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-30 text-white text-sm font-bold rounded-2xl shadow-xl shadow-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3 uppercase tracking-wider"
+                            >
+                                {isUploading ? (
+                                    <>
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                        Enviando
+                                    </>
+                                ) : (
+                                    <>
+                                        <Plus className="w-5 h-5" />
+                                        Adicionar
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Modal de Adição de Recurso */}
+            {/* Modal de Edição de Recurso (Imagem/Legenda) */}
+            {isEditAssetModalOpen && editingAsset && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div
+                        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+                        onClick={() => !isSavingAsset && setIsEditAssetModalOpen(false)}
+                    />
+                    <div className="relative w-full max-w-2xl bg-slate-900 border border-white/10 rounded-[32px] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+                        <div className="px-8 py-6 bg-white/5 border-b border-white/10 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-indigo-500/20 rounded-2xl group">
+                                    <Settings className="w-6 h-6 text-indigo-400 group-hover:rotate-90 transition-all duration-500" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-white tracking-tight">Editar Recurso</h3>
+                                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">{editingAsset.placeholder}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsEditAssetModalOpen(false)}
+                                className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-all"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            {/* Visualização Atual */}
+                            <div className="grid grid-cols-2 gap-8">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-4">
+                                        Imagem Atual
+                                    </label>
+                                    <div className="aspect-video bg-slate-800 rounded-2xl overflow-hidden border border-white/5 shadow-inner flex items-center justify-center group/preview relative">
+                                        <img
+                                            src={`http://localhost:8000/media/${editingAsset.storage_path.replace(/\\/g, '/').split('media/')[1] || editingAsset.storage_path.replace(/\\/g, '/')}`}
+                                            className="w-full h-full object-contain"
+                                            alt="Preview"
+                                        />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/preview:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                            <ImageIcon className="w-6 h-6 text-white/50" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-4">
+                                        Substituir por nova
+                                    </label>
+                                    <div className={`relative h-full aspect-video border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all ${editAssetFile ? 'border-indigo-500/50 bg-indigo-500/10' : 'border-white/10 hover:border-indigo-500/30 bg-white/5 hover:bg-white/10'}`}>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditAssetFile(e.target.files?.[0] || null)}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                        />
+                                        {editAssetFile ? (
+                                            <div className="flex flex-col items-center p-4">
+                                                <div className="p-2 bg-indigo-500/20 rounded-lg mb-2">
+                                                    <CheckCircle2 className="w-5 h-5 text-indigo-400" />
+                                                </div>
+                                                <span className="text-[10px] font-semibold text-white truncate max-w-[150px]">{editAssetFile.name}</span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center pointer-events-none">
+                                                <Upload className="w-6 h-6 text-slate-500 mb-2" />
+                                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Novo Arquivo</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Campo de Legenda */}
+                            <div className="space-y-3">
+                                <label className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Legenda da Imagem</span>
+                                    <span className="text-[10px] font-medium text-slate-600 italic">Opcional</span>
+                                </label>
+                                <div className="relative group/input">
+                                    <div className="absolute top-4 left-4 text-indigo-400/50 group-focus-within/input:text-indigo-400 transition-colors">
+                                        <FileText className="w-5 h-5" />
+                                    </div>
+                                    <textarea
+                                        value={editAssetCaption}
+                                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditAssetCaption(e.target.value)}
+                                        placeholder="Descreva o que esta imagem representa..."
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all min-h-[120px] resize-none text-sm leading-relaxed"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="px-8 py-6 bg-white/5 border-t border-white/10 flex gap-4">
+                            <button
+                                onClick={() => setIsEditAssetModalOpen(false)}
+                                className="flex-1 px-6 py-3.5 text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5 rounded-2xl transition-all uppercase tracking-wider"
+                                disabled={isSavingAsset}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (!editingAsset) return;
+                                    setIsSavingAsset(true);
+                                    try {
+                                        await handleUpdateAsset(editingAsset.id, {
+                                            caption: editAssetCaption,
+                                            file: editAssetFile || undefined
+                                        });
+                                        setIsEditAssetModalOpen(false);
+                                    } catch (err) {
+                                        console.error(err);
+                                    } finally {
+                                        setIsSavingAsset(false);
+                                    }
+                                }}
+                                disabled={isSavingAsset}
+                                className="flex-2 px-10 py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-30 text-white text-sm font-bold rounded-2xl shadow-xl shadow-indigo-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3 uppercase tracking-wider"
+                            >
+                                {isSavingAsset ? (
+                                    <>
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                        Salvando
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save className="w-5 h-5" />
+                                        Salvar Alterações
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

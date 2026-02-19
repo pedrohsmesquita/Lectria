@@ -81,7 +81,8 @@ async def get_book_chapters(
                 end_time=section.end_time,
                 content_markdown=section.content_markdown,
                 status=section.status,
-                video_filename=video_filename
+                video_filename=video_filename,
+                assets=section.assets
             ))
         
         result.append(ChapterResponse(
@@ -142,7 +143,8 @@ async def update_chapter(
             end_time=section.end_time,
             content_markdown=section.content_markdown,
             status=section.status,
-            video_filename=video_filename
+            video_filename=video_filename,
+            assets=section.assets
         ))
     
     return ChapterResponse(
@@ -211,7 +213,8 @@ async def update_section(
         end_time=section.end_time,
         content_markdown=section.content_markdown,
         status=section.status,
-        video_filename=video_filename
+        video_filename=video_filename,
+        assets=section.assets
     )
 
 

@@ -7,6 +7,20 @@ from typing import List, Optional
 from datetime import datetime
 
 
+class SectionAssetResponse(BaseModel):
+    """Response schema for section asset (image)"""
+    id: UUID
+    placeholder: str
+    caption: Optional[str] = None
+    source_type: str
+    storage_path: str
+    slide_page: Optional[int] = None
+    crop_info: Optional[dict] = None
+
+    class Config:
+        from_attributes = True
+
+
 class SectionResponse(BaseModel):
     """Response schema for section data"""
     id: UUID = Field(..., description="Section unique identifier")
@@ -19,6 +33,7 @@ class SectionResponse(BaseModel):
     content_markdown: Optional[str] = Field(None, description="Generated markdown content")
     status: str = Field(..., description="Processing status (PENDING, SUCCESS, ERROR)")
     video_filename: Optional[str] = Field(None, description="Source video filename")
+    assets: List[SectionAssetResponse] = Field(default_factory=list, description="List of assets (images) for this section")
     
     class Config:
         from_attributes = True
