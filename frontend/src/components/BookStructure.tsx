@@ -51,6 +51,10 @@ const BookStructure: React.FC = () => {
     const [generatingSectionId, setGeneratingSectionId] = useState<string | null>(null);
     const [bookStatus, setBookStatus] = useState<string>('');
 
+    // Editing mode state
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [tempChapters, setTempChapters] = useState<Chapter[]>([]);
+
     const fetchBookDetails = useCallback(async () => {
         try {
             const token = localStorage.getItem('access_token');
@@ -110,14 +114,15 @@ const BookStructure: React.FC = () => {
     // Adaptive polling during content generation
     useEffect(() => {
         // Check if any section is processing
-        const hasProcessingSections = chapters.some(ch =>
-            ch.sections.some(sec => sec.status === 'PROCESSANDO')
+        const hasProcessingSections = chapters.some((ch: Chapter) =>
+            ch.sections.some((sec: Section) => sec.status === 'PROCESSANDO')
         );
 
         // Check if book is generating content
         const isGeneratingContent = bookStatus === 'PROCESSANDO';
 
-        if (hasProcessingSections || isGeneratingContent) {
+        // ONLY poll if not in edit mode
+        if (!isEditMode && (hasProcessingSections || isGeneratingContent)) {
             // Poll every 2 seconds during active generation
             const intervalId = setInterval(() => {
                 fetchChapters();
@@ -126,20 +131,131 @@ const BookStructure: React.FC = () => {
 
             return () => clearInterval(intervalId);
         }
-    }, [chapters, bookStatus, fetchChapters, fetchBookDetails]);
+    }, [chapters, bookStatus, fetchChapters, fetchBookDetails, isEditMode]);
 
 
     // Handle item selection
     const handleSelectChapter = (chapter: Chapter) => {
+        if (isEditMode) return; // Prevent selection in edit mode
         setSelectedItem({ type: 'chapter', data: chapter });
         setEditTitle(chapter.title);
         setEditContent('');
     };
 
     const handleSelectSection = (section: Section) => {
+        if (isEditMode) return; // Prevent selection in edit mode
         setSelectedItem({ type: 'section', data: section });
         setEditTitle(section.title);
         setEditContent(section.content_markdown || '');
+    };
+
+    // Rearrangement Logic
+    const toggleEditMode = () => {
+        if (!isEditMode) {
+            setTempChapters(JSON.parse(JSON.stringify(chapters)));
+            setSelectedItem(null);
+        }
+        setIsEditMode(!isEditMode);
+    };
+
+    const moveChapter = (index: number, direction: 'up' | 'down') => {
+        const newChapters = [...tempChapters];
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        if (newIndex < 0 || newIndex >= newChapters.length) return;
+
+        const [movedChapter] = newChapters.splice(index, 1);
+        newChapters.splice(newIndex, 0, movedChapter);
+
+        // Update orders
+        newChapters.forEach((ch, i) => {
+            ch.order = i + 1;
+        });
+
+        setTempChapters(newChapters);
+    };
+
+    const moveSection = (chapterIndex: number, sectionIndex: number, direction: 'up' | 'down') => {
+        const newChapters = [...tempChapters];
+        const sections = [...newChapters[chapterIndex].sections];
+        const newIndex = direction === 'up' ? sectionIndex - 1 : sectionIndex + 1;
+        if (newIndex < 0 || newIndex >= sections.length) return;
+
+        const [movedSection] = sections.splice(sectionIndex, 1);
+        sections.splice(newIndex, 0, movedSection);
+
+        // Update orders
+        sections.forEach((sec, i) => {
+            sec.order = i + 1;
+        });
+
+        newChapters[chapterIndex].sections = sections;
+        setTempChapters(newChapters);
+    };
+
+    const moveSectionToChapter = (sourceChapterIndex: number, sectionIndex: number, targetChapterId: string) => {
+        if (!targetChapterId) return;
+        const newChapters = [...tempChapters];
+        const targetChapterIndex = newChapters.findIndex(ch => ch.id === targetChapterId);
+        if (targetChapterIndex === -1 || targetChapterIndex === sourceChapterIndex) return;
+
+        // Remove from source
+        const [movedSection] = newChapters[sourceChapterIndex].sections.splice(sectionIndex, 1);
+
+        // Update source orders
+        newChapters[sourceChapterIndex].sections.forEach((sec: Section, i: number) => {
+            sec.order = i + 1;
+        });
+
+        // Add to target
+        movedSection.chapter_id = targetChapterId;
+        newChapters[targetChapterIndex].sections.push(movedSection);
+
+        // Update target orders
+        newChapters[targetChapterIndex].sections.forEach((sec: Section, i: number) => {
+            sec.order = i + 1;
+        });
+
+        setTempChapters(newChapters);
+    };
+
+    const saveStructure = async () => {
+        setSaving(true);
+        try {
+            const token = localStorage.getItem('access_token');
+            const structureUpdate = {
+                chapters: tempChapters.map((ch: Chapter) => ({
+                    id: ch.id,
+                    order: ch.order,
+                    sections: ch.sections.map((sec: Section) => ({
+                        id: sec.id,
+                        order: sec.order,
+                        chapter_id: sec.chapter_id
+                    }))
+                }))
+            };
+
+            const response = await fetch(`http://localhost:8000/books/${bookId}/structure`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(structureUpdate)
+            });
+
+            if (response.ok) {
+                setChapters(tempChapters);
+                setIsEditMode(false);
+            } else {
+                const error = await response.json();
+                alert(`Erro ao salvar estrutura: ${error.detail || 'Erro desconhecido'}`);
+            }
+        } catch (error) {
+            console.error('Error saving structure:', error);
+            alert('Erro de conexão ao salvar estrutura.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     // Handle save
@@ -167,7 +283,7 @@ const BookStructure: React.FC = () => {
 
                 if (response.ok) {
                     const updatedChapter = await response.json();
-                    setChapters(prev => prev.map(ch =>
+                    setChapters((prev: Chapter[]) => prev.map((ch: Chapter) =>
                         ch.id === updatedChapter.id ? updatedChapter : ch
                     ));
                     setSelectedItem({ type: 'chapter', data: updatedChapter });
@@ -188,9 +304,9 @@ const BookStructure: React.FC = () => {
 
                 if (response.ok) {
                     const updatedSection = await response.json();
-                    setChapters(prev => prev.map(ch => ({
+                    setChapters((prev: Chapter[]) => prev.map((ch: Chapter) => ({
                         ...ch,
-                        sections: ch.sections.map(sec =>
+                        sections: ch.sections.map((sec: Section) =>
                             sec.id === updatedSection.id ? updatedSection : sec
                         )
                     })));
@@ -236,7 +352,7 @@ const BookStructure: React.FC = () => {
     // Handle Generate Content
     const handleGenerateContent = async () => {
         // Check if any section has a video_id (manual trigger check)
-        const hasVideo = chapters.some(ch => ch.sections.some(sec => sec.video_id));
+        const hasVideo = chapters.some((ch: Chapter) => ch.sections.some((sec: Section) => sec.video_id));
         if (hasVideo) {
             alert("Processamento de conteúdo via vídeo ainda não implementado. Por favor, use transcrições.");
             return;
@@ -310,8 +426,13 @@ const BookStructure: React.FC = () => {
     };
 
     // Check if all sections are generated
-    const allSectionsGenerated = chapters.length > 0 && chapters.every(ch =>
-        ch.sections.every(sec => sec.status === 'SUCESSO')
+    const allSectionsGenerated = chapters.length > 0 && chapters.every((ch: Chapter) =>
+        ch.sections.every((sec: Section) => sec.status === 'SUCESSO')
+    );
+
+    // Check if any section is NOT pending
+    const canEditStructure = chapters.length > 0 && chapters.every((ch: Chapter) =>
+        ch.sections.every((sec: Section) => sec.status === 'PENDENTE' || sec.status === 'ESTRUTURA_GERADA')
     );
 
 
@@ -329,9 +450,9 @@ const BookStructure: React.FC = () => {
 
             if (response.ok) {
                 // Instantly update local state to processing
-                setChapters(prev => prev.map(ch => ({
+                setChapters((prev: Chapter[]) => prev.map((ch: Chapter) => ({
                     ...ch,
-                    sections: ch.sections.map(sec =>
+                    sections: ch.sections.map((sec: Section) =>
                         sec.id === sectionId ? { ...sec, status: 'PROCESSANDO' } : sec
                     )
                 })));
@@ -380,40 +501,77 @@ const BookStructure: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Generate Content Button */}
-                    {(bookStatus === 'ESTRUTURA_GERADA' || bookStatus === 'DISCOVERY_COMPLETE') && (
-                        <button
-                            onClick={handleGenerateContent}
-                            disabled={generating}
-                            className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl transition-all shadow-lg shadow-green-500/20 flex items-center gap-2 font-semibold"
-                        >
-                            {generating ? (
+                    <div className="flex items-center gap-4">
+                        {/* Edit Structure Button */}
+                        {!generating && !loading && chapters.length > 0 && canEditStructure && bookStatus !== 'PROCESSANDO' && (
+                            <button
+                                onClick={toggleEditMode}
+                                className={`px-4 py-2 rounded-xl transition-all border flex items-center gap-2 font-semibold ${isEditMode
+                                    ? 'bg-red-500/20 border-red-500/50 text-red-400'
+                                    : 'bg-white/10 border-white/20 text-white hover:bg-white/20'
+                                    }`}
+                            >
+                                {isEditMode ? <X className="w-5 h-5" /> : <Play className="w-4 h-4 rotate-90" />}
+                                {isEditMode ? 'Cancelar Edição' : 'Editar Estrutura'}
+                            </button>
+                        )}
+
+                        {/* Save Structure Button */}
+                        {isEditMode && (
+                            <button
+                                onClick={saveStructure}
+                                disabled={saving}
+                                className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl transition-all shadow-lg shadow-blue-500/20 flex items-center gap-2 font-semibold disabled:opacity-50"
+                            >
+                                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                                Salvar Estrutura
+                            </button>
+                        )}
+
+                        {/* Generate Content Button */}
+                        {!isEditMode && (bookStatus === 'ESTRUTURA_GERADA' || bookStatus === 'DISCOVERY_COMPLETE') && (
+                            <button
+                                onClick={handleGenerateContent}
+                                disabled={generating}
+                                className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl transition-all shadow-lg shadow-green-500/20 flex items-center gap-2 font-semibold"
+                            >
+                                {generating ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                ) : (
+                                    <BookOpen className="w-5 h-5" />
+                                )}
+                                Gerar Conteúdo Completo
+                            </button>
+                        )}
+
+                        {/* Download PDF Button - Only show when all sections are generated */}
+                        {!isEditMode && allSectionsGenerated && (
+                            <button
+                                onClick={handleDownloadPDF}
+                                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2 font-semibold"
+                            >
+                                <Download className="w-5 h-5" />
+                                Baixar PDF
+                            </button>
+                        )}
+
+                        {bookStatus === 'PROCESSANDO' && (
+                            <div className="flex items-center gap-2 px-6 py-3 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-xl">
                                 <Loader2 className="w-5 h-5 animate-spin" />
-                            ) : (
-                                <BookOpen className="w-5 h-5" />
-                            )}
-                            Gerar Conteúdo Completo
-                        </button>
-                    )}
-
-                    {/* Download PDF Button - Only show when all sections are generated */}
-                    {allSectionsGenerated && (
-                        <button
-                            onClick={handleDownloadPDF}
-                            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2 font-semibold"
-                        >
-                            <Download className="w-5 h-5" />
-                            Baixar PDF
-                        </button>
-                    )}
-
-                    {bookStatus === 'PROCESSANDO' && (
-                        <div className="flex items-center gap-2 px-6 py-3 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-xl">
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            <span className="font-semibold">Gerando Conteúdo...</span>
-                        </div>
-                    )}
+                                <span className="font-semibold">Gerando Conteúdo...</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
+
+                {/* Edit Mode Instructions */}
+                {isEditMode && (
+                    <div className="mb-6 p-4 bg-blue-500/20 border border-blue-500/40 rounded-2xl animate-in fade-in slide-in-from-top-4 duration-300">
+                        <p className="text-blue-200 text-center font-medium">
+                            Mova capítulos, seções no mesmo capítulo ou entre capítulos utilizando as setas e o menu de seleção.
+                        </p>
+                    </div>
+                )}
 
                 {/* Loading State */}
                 {loading && (
@@ -432,96 +590,163 @@ const BookStructure: React.FC = () => {
                 )}
 
                 {/* Main Content */}
-                {!loading && chapters.length > 0 && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {!loading && (isEditMode ? tempChapters : chapters).length > 0 && (
+                    <div className={`grid grid-cols-1 ${isEditMode ? 'lg:grid-cols-1' : 'lg:grid-cols-3'} gap-6`}>
                         {/* Left Panel - Chapter/Section List */}
-                        <div className="lg:col-span-2 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+                        <div className={`${isEditMode ? 'lg:col-span-1' : 'lg:col-span-2'} bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 p-6 max-h-[calc(100vh-200px)] overflow-y-auto`}>
                             <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                                 <FileText className="w-5 h-5" />
-                                Estrutura
+                                Estrutura {isEditMode && <span className="text-blue-400 text-sm font-normal">(Modo de Edição)</span>}
                             </h2>
 
                             <div className="space-y-4">
-                                {chapters.map((chapter) => (
+                                {(isEditMode ? tempChapters : chapters).map((chapter, chapterIndex) => (
                                     <div key={chapter.id} className="space-y-2">
                                         {/* Chapter */}
                                         <div
                                             onClick={() => handleSelectChapter(chapter)}
-                                            className={`p-4 rounded-lg cursor-pointer transition-all ${selectedItem?.type === 'chapter' && selectedItem.data.id === chapter.id
+                                            className={`p-4 rounded-lg transition-all ${!isEditMode && selectedItem?.type === 'chapter' && selectedItem.data.id === chapter.id
                                                 ? 'bg-purple-600/30 border-2 border-purple-500'
                                                 : 'bg-white/5 hover:bg-white/10 border-2 border-transparent'
-                                                }`}
+                                                } ${isEditMode ? 'cursor-default' : 'cursor-pointer'}`}
                                         >
-                                            <div className="flex items-center gap-2">
-                                                <ChevronRight className="w-5 h-5 text-purple-400" />
-                                                <span className="font-semibold text-white">
-                                                    {chapter.order}. {chapter.title}
-                                                </span>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <ChevronRight className="w-5 h-5 text-purple-400" />
+                                                    <span className="font-semibold text-white">
+                                                        {chapter.order}. {chapter.title}
+                                                    </span>
+                                                </div>
+
+                                                {isEditMode && (
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); moveChapter(chapterIndex, 'up'); }}
+                                                            disabled={chapterIndex === 0}
+                                                            className="p-1 hover:bg-white/20 rounded disabled:opacity-30 transition-colors"
+                                                            title="Mover capítulo para cima"
+                                                        >
+                                                            <ChevronRight className="w-5 h-5 -rotate-90" />
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); moveChapter(chapterIndex, 'down'); }}
+                                                            disabled={chapterIndex === tempChapters.length - 1}
+                                                            className="p-1 hover:bg-white/20 rounded disabled:opacity-30 transition-colors"
+                                                            title="Mover capítulo para baixo"
+                                                        >
+                                                            <ChevronRight className="w-5 h-5 rotate-90" />
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
                                         {/* Sections */}
                                         <div className="ml-8 space-y-2">
-                                            {chapter.sections.map((section) => (
+                                            {chapter.sections.map((section, sectionIndex) => (
                                                 <div
                                                     key={section.id}
                                                     onClick={() => handleSelectSection(section)}
-                                                    className={`p-3 rounded-lg cursor-pointer transition-all ${selectedItem?.type === 'section' && selectedItem.data.id === section.id
+                                                    className={`p-3 rounded-lg transition-all ${!isEditMode && selectedItem?.type === 'section' && selectedItem.data.id === section.id
                                                         ? 'bg-indigo-600/30 border-2 border-indigo-500'
                                                         : 'bg-white/5 hover:bg-white/10 border-2 border-transparent'
-                                                        }`}
+                                                        } ${isEditMode ? 'cursor-default' : 'cursor-pointer'}`}
                                                 >
                                                     <div className="flex items-center justify-between">
-                                                        <span className="text-sm text-slate-300">
-                                                            {chapter.order}.{section.order} {section.title}
-                                                        </span>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`px-2 py-1 rounded text-xs border ${getStatusColor(section.status)}`}>
-                                                                {section.status}
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-sm text-slate-300">
+                                                                {chapter.order}.{section.order} {section.title}
                                                             </span>
-                                                            {(section.status === 'PENDENTE' || section.status === 'ERRO') && (
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleGenerateSectionContent(section.id);
-                                                                    }}
-                                                                    disabled={generatingSectionId === section.id || generating}
-                                                                    className="p-1 bg-green-600/20 hover:bg-green-600/40 border border-green-500/30 text-green-400 rounded transition-all flex items-center gap-1 text-[10px] font-bold"
-                                                                    title="Gerar apenas esta seção"
-                                                                >
-                                                                    {generatingSectionId === section.id ? (
-                                                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                                                    ) : (
-                                                                        <Play className="w-3 h-3" />
+                                                        </div>
+
+                                                        <div className="flex items-center gap-2">
+                                                            {isEditMode ? (
+                                                                <div className="flex items-center gap-3 bg-black/20 p-1 rounded-lg">
+                                                                    {/* Move arrows */}
+                                                                    <div className="flex items-center border-r border-white/10 pr-2 mr-2">
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); moveSection(chapterIndex, sectionIndex, 'up'); }}
+                                                                            disabled={sectionIndex === 0}
+                                                                            className="p-1 hover:bg-white/20 rounded disabled:opacity-30 transition-colors"
+                                                                            title="Mover seção para cima"
+                                                                        >
+                                                                            <ChevronRight className="w-4 h-4 -rotate-90" />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); moveSection(chapterIndex, sectionIndex, 'down'); }}
+                                                                            disabled={sectionIndex === chapter.sections.length - 1}
+                                                                            className="p-1 hover:bg-white/20 rounded disabled:opacity-30 transition-colors"
+                                                                            title="Mover seção para baixo"
+                                                                        >
+                                                                            <ChevronRight className="w-4 h-4 rotate-90" />
+                                                                        </button>
+                                                                    </div>
+
+                                                                    {/* Chapter select */}
+                                                                    <select
+                                                                        value={chapter.id}
+                                                                        onChange={(e) => moveSectionToChapter(chapterIndex, sectionIndex, e.target.value)}
+                                                                        className="bg-slate-800 text-xs text-white border border-white/10 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-blue-500"
+                                                                    >
+                                                                        {tempChapters.map(ch => (
+                                                                            <option key={ch.id} value={ch.id}>
+                                                                                Mover p/ Cap {ch.order}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                            ) : (
+                                                                <>
+                                                                    <span className={`px-2 py-1 rounded text-xs border ${getStatusColor(section.status)}`}>
+                                                                        {section.status}
+                                                                    </span>
+                                                                    {(section.status === 'PENDENTE' || section.status === 'ERRO') && (
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleGenerateSectionContent(section.id);
+                                                                            }}
+                                                                            disabled={generatingSectionId === section.id || generating}
+                                                                            className="p-1 bg-green-600/20 hover:bg-green-600/40 border border-green-500/30 text-green-400 rounded transition-all flex items-center gap-1 text-[10px] font-bold"
+                                                                            title="Gerar apenas esta seção"
+                                                                        >
+                                                                            {generatingSectionId === section.id ? (
+                                                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                                            ) : (
+                                                                                <Play className="w-3 h-3" />
+                                                                            )}
+                                                                            GERAR
+                                                                        </button>
                                                                     )}
-                                                                    GERAR
-                                                                </button>
+                                                                </>
                                                             )}
                                                         </div>
                                                     </div>
 
-                                                    {/* Progress Bar */}
-                                                    <div className="mt-2">
-                                                        <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
-                                                            <div
-                                                                className={`h-full transition-all duration-500 ${section.status === 'PROCESSANDO'
-                                                                    ? 'bg-gradient-to-r from-blue-500 to-indigo-500 animate-pulse'
-                                                                    : section.status === 'SUCESSO'
-                                                                        ? 'bg-gradient-to-r from-green-500 to-emerald-500'
-                                                                        : section.status === 'ERRO'
-                                                                            ? 'bg-gradient-to-r from-red-500 to-rose-500'
-                                                                            : 'bg-slate-600'
-                                                                    }`}
-                                                                style={{
-                                                                    width: section.status === 'PROCESSANDO'
-                                                                        ? '50%'
-                                                                        : section.status === 'SUCESSO' || section.status === 'ERRO'
-                                                                            ? '100%'
-                                                                            : '0%'
-                                                                }}
-                                                            ></div>
+                                                    {/* Progress Bar (Hide in edit mode for cleaner UI) */}
+                                                    {!isEditMode && (
+                                                        <div className="mt-2">
+                                                            <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+                                                                <div
+                                                                    className={`h-full transition-all duration-500 ${section.status === 'PROCESSANDO'
+                                                                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 animate-pulse'
+                                                                        : section.status === 'SUCESSO'
+                                                                            ? 'bg-gradient-to-r from-green-500 to-emerald-500'
+                                                                            : section.status === 'ERRO'
+                                                                                ? 'bg-gradient-to-r from-red-500 to-rose-500'
+                                                                                : 'bg-slate-600'
+                                                                        }`}
+                                                                    style={{
+                                                                        width: section.status === 'PROCESSANDO'
+                                                                            ? '50%'
+                                                                            : section.status === 'SUCESSO' || section.status === 'ERRO'
+                                                                                ? '100%'
+                                                                                : '0%'
+                                                                    }}
+                                                                ></div>
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
@@ -531,7 +756,7 @@ const BookStructure: React.FC = () => {
                         </div>
 
                         {/* Right Panel - Edit Sidebar */}
-                        {selectedItem && (
+                        {!isEditMode && selectedItem && (
                             <div className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
                                 <div className="flex items-center justify-between mb-4">
                                     <h2 className="text-xl font-semibold text-white">

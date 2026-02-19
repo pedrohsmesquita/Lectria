@@ -46,3 +46,22 @@ class SectionUpdate(BaseModel):
     """Request schema for updating section"""
     title: Optional[str] = Field(None, min_length=1, max_length=500, description="New section title")
     content_markdown: Optional[str] = Field(None, description="Updated markdown content")
+
+
+class SectionReorder(BaseModel):
+    """Request schema for reordering a section"""
+    id: UUID
+    order: int
+    chapter_id: UUID
+
+
+class ChapterReorder(BaseModel):
+    """Request schema for reordering a chapter and its sections"""
+    id: UUID
+    order: int
+    sections: List[SectionReorder]
+
+
+class BookStructureUpdate(BaseModel):
+    """Request schema for bulk updating the entire book structure"""
+    chapters: List[ChapterReorder]
