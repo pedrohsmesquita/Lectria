@@ -9,6 +9,7 @@ Este projeto automatiza a criação de livros didáticos a partir da transcriç�
 * **IA:** Google Gemini API
 * **Banco de Dados:** PostgreSQL
 * **Infraestrutura:** Docker & Docker Compose
+* **Orquestração:** Celery + Redis
 
 ---
 
