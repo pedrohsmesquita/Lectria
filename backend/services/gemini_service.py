@@ -276,7 +276,7 @@ async def generate_section_content(
     
     prompt_parts.append("Gere o JSON com content_markdown, bibliography e assets.")
 
-    logger.info(f"Calling Gemini Pro for Section Content: {section_title}...")
+    logger.info(f"Calling Gemini Flash for Section Content: {section_title}...")
     
     generation_config = genai.GenerationConfig(
         temperature=0.3,  # Lower temperature for more stable JSON

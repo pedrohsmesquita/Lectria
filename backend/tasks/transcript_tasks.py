@@ -259,7 +259,7 @@ def process_book_content_sequential_task(self, book_id: str):
 def process_section_content_task(self, section_id: str, trigger_next: bool = True):
     """
     Individual Section Task:
-    1. Calls Gemini Pro for the specific section content.
+    1. Calls Gemini Flash for the specific section content.
     2. Processes bibliography with global numbering system.
     3. Replaces [REF:...] markers with [N] in markdown.
     4. Saves Markdown, assets, and references.
