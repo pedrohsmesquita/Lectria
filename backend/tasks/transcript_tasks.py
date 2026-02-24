@@ -294,12 +294,27 @@ def process_section_content_task(self, section_id: str, trigger_next: bool = Tru
         ))
 
         # ========== PROCESS BIBLIOGRAPHY WITH GLOBAL NUMBERING ==========
-        reference_mapping = {}  # {key: number} for replacement
+        # Phase A: Proactively save new references found in this section
+        import re
+        markdown_content = content_result["content_markdown"]
+        is_bib_chapter = getattr(chapter, 'is_bibliography', False)
         
         for bib_entry in content_result.get("bibliography_found", []):
-            ref_key = bib_entry["key"]  # Ex: "REF:SILVA_2022"
+            raw_key = str(bib_entry["key"]).strip().upper()  # Normalize: Uppercase and trimmed
+            ref_key = raw_key if raw_key.startswith("REF:") else f"REF:{raw_key}" # Ensure REF: prefix
             ref_text = bib_entry["full_reference"]  # ABNT formatted text
             
+            # v6 FEATURE: CITATION FILTER
+            # Check if this marker is actually used in the text (unless it's the bibliography chapter)
+            # We look for the raw key without the "REF:" prefix in the marker search
+            search_key = raw_key[4:] if raw_key.startswith("REF:") else raw_key
+            marker_pattern = rf"\[\s*(?i:ref)\s*:\s*{re.escape(search_key)}\s*\]"
+            is_cited = re.search(marker_pattern, markdown_content)
+            
+            if not is_bib_chapter and not is_cited:
+                logger.info(f"Skipping reference {ref_key} - not cited in this section text.")
+                continue
+
             # Check if reference already exists in this book
             existing_ref = db.query(GlobalReferences).filter(
                 GlobalReferences.book_id == book.id,
@@ -307,10 +322,8 @@ def process_section_content_task(self, section_id: str, trigger_next: bool = Tru
             ).first()
             
             if existing_ref:
-                # Reuse existing number
-                reference_mapping[ref_key] = existing_ref.reference_number
+                logger.info(f"Reference already exists: {ref_key}")
                 ref_obj = existing_ref
-                logger.info(f"Reusing reference {ref_key} with number {existing_ref.reference_number}")
             else:
                 # Create new reference with next sequential number
                 max_number = db.query(func.max(GlobalReferences.reference_number)).filter(
@@ -325,24 +338,46 @@ def process_section_content_task(self, section_id: str, trigger_next: bool = Tru
                 )
                 db.add(new_ref)
                 db.flush()  # Get the ID
-                
-                reference_mapping[ref_key] = new_ref.reference_number
                 ref_obj = new_ref
-                logger.info(f"Created new reference {ref_key} with number {new_ref.reference_number}")
+                logger.info(f"Created new global reference {ref_key} as [{new_ref.reference_number}]")
             
             # Associate reference with this section (many-to-many)
             if ref_obj not in section.references:
                 section.references.append(ref_obj)
         
-        # ========== REPLACE [REF:...] MARKERS WITH [N] ==========
+        # Phase B: Global Replacement Logic (Resilient)
+        # We fetch ALL references for this book to ensure any marker [REF:...] 
+        # is replaced, even if it was discovered in a previous section.
+        all_book_refs = db.query(GlobalReferences).filter(
+            GlobalReferences.book_id == book.id
+        ).all()
+        
+        global_ref_map = {r.reference_key: r.reference_number for r in all_book_refs}
+        
+        import re
         markdown_content = content_result["content_markdown"]
         
-        for ref_key, ref_number in reference_mapping.items():
-            # Replace [REF:SILVA_2022] with [1]
-            markdown_content = markdown_content.replace(f"[{ref_key}]", f"[{ref_number}]")
-            logger.info(f"Replaced [{ref_key}] with [{ref_number}] in markdown")
+        # Pattern matches [REF:KEY], [ ref: key ], [REF: KEY] etc.
+        ref_pattern = re.compile(r'\[\s*(?i:ref):([^\]]+)\]')
         
-        section.content_markdown = markdown_content
+        def replace_ref_callback(match):
+            full_match = match.group(0) # e.g., "[REF:SILVA_2022]"
+            raw_key = match.group(1).strip().upper() # e.g., "SILVA_2022"
+            
+            # Try to match in global map
+            # We check both the raw_key and "REF:"+raw_key to be extra safe
+            lookup_key = raw_key if raw_key.startswith("REF:") else f"REF:{raw_key}"
+            
+            if lookup_key in global_ref_map:
+                num = global_ref_map[lookup_key]
+                logger.info(f"Replaced {full_match} with [{num}] using global map")
+                return f"[{num}]"
+            else:
+                logger.warning(f"Found placeholder {full_match} but key '{lookup_key}' not found in global references for book {book.id}")
+                return full_match # Keep original marker for troubleshooting instead of deleting
+        
+        final_markdown = ref_pattern.sub(replace_ref_callback, markdown_content)
+        section.content_markdown = final_markdown
         section.status = "SUCESSO"
         
         # ========== SAVE ASSETS (SLIDES) AND EXTRACT IMAGES ==========
@@ -395,7 +430,7 @@ def process_section_content_task(self, section_id: str, trigger_next: bool = Tru
         section.content_markdown = final_markdown.strip()
 
         db.commit()
-        logger.info(f"Section {section_id} processed successfully with {len(reference_mapping)} references")
+        logger.info(f"Section {section_id} processed successfully")
         
         # Trigger next section if requested
         if trigger_next:
