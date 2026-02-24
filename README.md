@@ -19,7 +19,7 @@ Siga os passos abaixo para configurar o ambiente de desenvolvimento.
 
 ### 1. Pré-requisitos
 
-* **Docker** e **Docker Compose** instalados (no Windows só é preciso do **Docker Desktop**).
+* **Docker** e **Docker Compose** instalados (no Windows é preciso do **Docker Desktop** e do **WSL2**).
 * Uma **API Key** do Google Gemini.
 
 ### 2. Configuração do Ambiente
