@@ -7,6 +7,20 @@ from typing import List, Optional
 from datetime import datetime
 
 
+class SectionAssetResponse(BaseModel):
+    """Response schema for section asset (image)"""
+    id: UUID
+    placeholder: str
+    caption: Optional[str] = None
+    source_type: str
+    storage_path: str
+    slide_page: Optional[int] = None
+    crop_info: Optional[dict] = None
+
+    class Config:
+        from_attributes = True
+
+
 class SectionResponse(BaseModel):
     """Response schema for section data"""
     id: UUID = Field(..., description="Section unique identifier")
@@ -19,6 +33,7 @@ class SectionResponse(BaseModel):
     content_markdown: Optional[str] = Field(None, description="Generated markdown content")
     status: str = Field(..., description="Processing status (PENDING, SUCCESS, ERROR)")
     video_filename: Optional[str] = Field(None, description="Source video filename")
+    assets: List[SectionAssetResponse] = Field(default_factory=list, description="List of assets (images) for this section")
     
     class Config:
         from_attributes = True
@@ -30,6 +45,7 @@ class ChapterResponse(BaseModel):
     book_id: UUID = Field(..., description="Parent book ID")
     title: str = Field(..., description="Chapter title")
     order: int = Field(..., description="Position within book")
+    is_bibliography: bool = Field(False, description="True if this is the bibliography chapter")
     created_at: datetime = Field(..., description="Creation timestamp")
     sections: List[SectionResponse] = Field(default_factory=list, description="List of sections in this chapter")
     
@@ -65,3 +81,16 @@ class ChapterReorder(BaseModel):
 class BookStructureUpdate(BaseModel):
     """Request schema for bulk updating the entire book structure"""
     chapters: List[ChapterReorder]
+
+
+class BibliographyUpdate(BaseModel):
+    """Request schema for updating bibliography content"""
+    content_markdown: str = Field(..., description="Full markdown text of the bibliography as edited by the user")
+
+
+class BibliographyUpdateResponse(BaseModel):
+    """Response schema after updating bibliography"""
+    message: str
+    references_updated: int
+    sections_affected: int
+    content_markdown: str

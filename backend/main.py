@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import os
+from fastapi.staticfiles import StaticFiles
 
 from database import get_db, check_database_connection
 from routes.auth_routes import router as auth_router
@@ -17,6 +18,8 @@ from routes.processing_routes import router as processing_router
 from routes.transcript_routes import router as transcript_router
 from routes.section_routes import router as section_router
 from routes.books_export_routes import router as books_export_router
+from routes.asset_routes import router as asset_router
+from routes.bibliography_routes import router as bibliography_router
 
 app = FastAPI(
     title="Video to Book API",
@@ -61,6 +64,13 @@ app.include_router(processing_router)
 app.include_router(transcript_router)
 app.include_router(section_router)
 app.include_router(books_export_router)
+app.include_router(asset_router)
+app.include_router(bibliography_router)
+
+# Mount media directory for serving extracted images
+media_path = os.getenv("MEDIA_STORAGE_PATH", "/app/media")
+if os.path.exists(media_path):
+    app.mount("/media", StaticFiles(directory=media_path), name="media")
 
 @app.get("/")
 async def root():

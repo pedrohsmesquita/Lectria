@@ -273,7 +273,9 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
     story.append(Paragraph("Sumário", styles["toc_title"]))
     story.append(Spacer(1, 1 * cm))
 
-    for chapter, sections in chapter_sections:
+    regular_chapters = [(ch, secs) for ch, secs in chapter_sections if not ch.is_bibliography]
+
+    for chapter, sections in regular_chapters:
         # Linha do capítulo no sumário
         story.append(Paragraph(f"{chapter.order} {chapter.title}", styles["toc_chapter"]))
         
@@ -284,13 +286,17 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
             
     # Incluir Referências no sumário se existirem
     if references:
-        next_chapter_number = len(chapters) + 1
+        next_chapter_number = len(regular_chapters) + 1
         story.append(Paragraph(f"{next_chapter_number} Referências", styles["toc_chapter"]))
 
     story.append(PageBreak())
 
     # --- Conteúdo por capítulo ---
     for chapter, sections in chapter_sections:
+        # Pular o capítulo de bibliografia (ele é gerado separadamente no final)
+        if chapter.is_bibliography:
+            continue
+
         story.append(Paragraph(f"{chapter.order} {chapter.title}", styles["chapter_title"]))
 
         for section in sections:
@@ -332,44 +338,42 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
                             
                             if asset:
                                 img_path = None
+                                storage_path = asset.storage_path
                                 
-                                # Verificar o tipo de fonte do asset
-                                if asset.source_type == "SLIDE":
-                                    # Extrair imagem do PDF do slide
-                                    if asset.slide_page is not None and asset.crop_info:
-                                        try:
-                                            # storage_path aponta para o PDF do slide
-                                            slide_pdf_path = asset.storage_path
-                                            if not os.path.isabs(slide_pdf_path):
-                                                media_root = os.getenv("MEDIA_STORAGE_PATH", "/app/media")
-                                                slide_pdf_path = os.path.join(media_root, slide_pdf_path)
-                                            
-                                            # Extrair a imagem usando o serviço
-                                            section_number = f"{chapter.order}.{section.order}"
-                                            img_path = extract_image_from_slide(
-                                                pdf_path=slide_pdf_path,
-                                                page_number=asset.slide_page,
-                                                crop_info=asset.crop_info,
-                                                user_id=book.author_profile_id,
-                                                book_id=book.id,
-                                                placeholder=ph,
-                                                section_number=section_number,
-                                            )
-                                        except Exception as e:
-                                            logger.error(f"Erro ao extrair imagem do slide para {ph}: {e}")
-                                            img_path = None
-                                    else:
-                                        logger.warning(f"Asset {ph} do tipo SLIDE sem slide_page ou crop_info")
+                                # 1. Check if storage_path already points to an image
+                                # (extracted slides, video crops, or manual uploads)
+                                is_image = any(storage_path.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.webp'])
                                 
-                                elif asset.source_type == "VIDEO":
-                                    # Usar caminho direto para imagens já extraídas de vídeo
-                                    img_path = asset.storage_path
+                                if is_image:
+                                    img_path = storage_path
                                     if not os.path.isabs(img_path):
                                         media_root = os.getenv("MEDIA_STORAGE_PATH", "/app/media")
                                         img_path = os.path.join(media_root, img_path)
                                 
+                                # 2. Fallback to extraction for SLIDE source (legacy support)
+                                elif asset.source_type == "SLIDE" and asset.slide_page is not None and asset.crop_info:
+                                    try:
+                                        slide_pdf_path = storage_path
+                                        if not os.path.isabs(slide_pdf_path):
+                                            media_root = os.getenv("MEDIA_STORAGE_PATH", "/app/media")
+                                            slide_pdf_path = os.path.join(media_root, slide_pdf_path)
+                                        
+                                        section_number_str = f"{chapter.order}.{section.order}"
+                                        img_path = extract_image_from_slide(
+                                            pdf_path=slide_pdf_path,
+                                            page_number=asset.slide_page,
+                                            crop_info=asset.crop_info,
+                                            user_id=book.author_profile_id,
+                                            book_id=book.id,
+                                            placeholder=ph,
+                                            section_number=section_number_str,
+                                        )
+                                    except Exception as e:
+                                        logger.error(f"Erro ao extrair imagem do slide para {ph}: {e}")
+                                        img_path = None
+                                
                                 else:
-                                    logger.warning(f"Asset {ph} com source_type desconhecido: {asset.source_type}")
+                                    logger.warning(f"Asset {ph} com source_type {asset.source_type} não pôde ser resolvido para imagem")
                                 
                                 # Inserir a imagem se o caminho foi obtido
                                 if img_path and os.path.isfile(img_path):
@@ -393,8 +397,8 @@ def generate_book_pdf(book_id: UUID, db: Session) -> Tuple[bytes, str]:
 
     # --- Capítulo de Referências (se existirem) ---
     if references:
-        # Calcular o número do próximo capítulo
-        next_chapter_number = len(chapters) + 1
+        # Calcular o número com base apenas nos capítulos regulares
+        next_chapter_number = len(regular_chapters) + 1
         
         story.append(
             Paragraph(
